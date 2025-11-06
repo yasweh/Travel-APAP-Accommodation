@@ -12,10 +12,85 @@ const router = createRouter({
     {
       path: '/about',
       name: 'about',
-      // route level code-splitting
-      // this generates a separate chunk (About.[hash].js) for this route
-      // which is lazy-loaded when the route is visited.
       component: () => import('../views/AboutView.vue'),
+    },
+
+    // Property Management
+    {
+      path: '/property',
+      name: 'property-list',
+      component: () => import('../views/property/PropertyList.vue'),
+    },
+    {
+      path: '/property/create',
+      name: 'property-create',
+      component: () => import('../views/property/PropertyForm.vue'),
+    },
+    {
+      path: '/property/:id',
+      name: 'property-detail',
+      component: () => import('../views/property/PropertyDetail.vue'),
+    },
+    {
+      path: '/property/edit/:id',
+      name: 'property-edit',
+      component: () => import('../views/property/PropertyForm.vue'),
+    },
+
+    // Room Type Management
+    {
+      path: '/room-type',
+      name: 'room-type-list',
+      component: () => import('../views/room-type/RoomTypeList.vue'),
+    },
+    {
+      path: '/room-type/create',
+      name: 'room-type-create',
+      component: () => import('../views/room-type/RoomTypeForm.vue'),
+    },
+    {
+      path: '/room-type/create/:propertyId',
+      name: 'room-type-create-for-property',
+      component: () => import('../views/room-type/RoomTypeForm.vue'),
+    },
+
+    // Booking Management
+    {
+      path: '/booking',
+      name: 'booking-list',
+      component: () => import('../views/booking/BookingList.vue'),
+    },
+    {
+      path: '/booking/create',
+      name: 'booking-create',
+      component: () => import('../views/booking/BookingCreate.vue'),
+    },
+    {
+      path: '/booking/:id',
+      name: 'booking-detail',
+      component: () => import('../views/booking/BookingDetail.vue'),
+    },
+    {
+      path: '/booking/update/:id',
+      name: 'booking-update',
+      component: () => import('../views/booking/BookingUpdate.vue'),
+    },
+    {
+      path: '/booking/chart',
+      name: 'booking-chart',
+      component: () => import('../views/booking/BookingChart.vue'),
+    },
+
+    // Maintenance Management
+    {
+      path: '/maintenance',
+      name: 'maintenance-list',
+      component: () => import('../views/maintenance/MaintenanceList.vue'),
+    },
+    {
+      path: '/maintenance/create',
+      name: 'maintenance-create',
+      component: () => import('../views/maintenance/MaintenanceForm.vue'),
     },
   ],
 })
