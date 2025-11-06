@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  postgres-dev:
+    image: postgres:15-alpine
+    container_name: accommodation-dev-db
+    ports:
+      - "35001:5432"  # Host:Container
+    environment:
+      - POSTGRES_USER=accommodation-dev
+      - POSTGRES_PASSWORD=CLI-825.2025X
+      - POSTGRES_DB=accommodation_dev
+    volumes:
+      - accommodation-dev-db-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  accommodation-dev-db-data:
+    driver: local
