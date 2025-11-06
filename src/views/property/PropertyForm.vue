@@ -10,6 +10,11 @@
       <!-- Property Basic Info -->
       <div class="section-title">Property Information</div>
       
+      <div v-if="isEditMode" class="form-group">
+        <label>Property ID</label>
+        <input type="text" :value="route.params.id" disabled class="disabled-input" />
+      </div>
+
       <div class="form-group">
         <label>Property Name *</label>
         <input type="text" v-model="formData.propertyName" required placeholder="e.g., Grand Hotel Jakarta" />
@@ -70,9 +75,9 @@
 
       <div v-for="(roomType, index) in formData.roomTypes" :key="index" class="room-type-section">
         <div class="room-type-header">
-          <h3>Room Type {{ index + 1 }}</h3>
+          <h3>Room Type {{ index + 1 }} {{ roomType.roomTypeId ? '(Existing)' : '(New)' }}</h3>
           <button 
-            v-if="formData.roomTypes.length > 1" 
+            v-if="formData.roomTypes.length > 1 && (!isEditMode || !roomType.roomTypeId)" 
             type="button" 
             @click="removeRoomType(index)" 
             class="btn-remove"
@@ -81,8 +86,15 @@
           </button>
         </div>
 
+        <!-- Show Room Type ID only for existing room types -->
+        <div v-if="isEditMode && roomType.roomTypeId" class="form-group">
+          <label>Room Type ID</label>
+          <input type="text" :value="roomType.roomTypeId" disabled class="disabled-input" />
+        </div>
+
         <div class="form-row">
-          <div class="form-group">
+          <!-- Show Room Type Name only for new room types, hide for existing ones -->
+          <div v-if="!roomType.roomTypeId" class="form-group">
             <label>Room Type Name *</label>
             <select v-model="roomType.name" required>
               <option value="">Select Room Type</option>
@@ -110,6 +122,12 @@
               </optgroup>
             </select>
           </div>
+          
+          <!-- Display read-only name for existing room types -->
+          <div v-else class="form-group">
+            <label>Room Type Name</label>
+            <input type="text" :value="roomType.name" disabled class="disabled-input" />
+          </div>
 
           <div class="form-group">
             <label>Facility *</label>
@@ -129,7 +147,8 @@
           </div>
         </div>
 
-        <div class="form-row">
+        <!-- Show Floor and Number of Rooms only for new room types (hide for existing) -->
+        <div v-if="!roomType.roomTypeId" class="form-row">
           <div class="form-group">
             <label>Floor *</label>
             <input type="number" v-model.number="roomType.floor" required min="0" placeholder="0" />
@@ -172,6 +191,7 @@ const router = useRouter()
 const route = useRoute()
 
 interface RoomTypeForm {
+  roomTypeId?: string
   name: string
   facility: string
   capacity: number
@@ -252,7 +272,20 @@ const loadProperty = async () => {
       formData.value.description = prop.description || ''
       formData.value.ownerName = prop.ownerName || ''
       formData.value.ownerId = prop.ownerId || generateUUID()
-      // Keep existing room types in form, edit mode doesn't change room types
+      
+      // Load room types from response
+      if (response.roomTypes && response.roomTypes.length > 0) {
+        formData.value.roomTypes = response.roomTypes.map((rt: any) => ({
+          roomTypeId: rt.roomTypeId,
+          name: rt.name || '',
+          facility: rt.facility || '',
+          capacity: rt.capacity || 0,
+          price: rt.price || 0,
+          floor: rt.floor || 0,
+          roomCount: rt.listRoom?.length || 0, // Calculate from existing rooms
+          description: rt.description || ''
+        }))
+      }
     }
   } catch (error: any) {
     errorMessage.value = error.response?.data?.message || 'Failed to load'
@@ -281,9 +314,25 @@ const submitForm = async () => {
   // Validate each room type
   for (let i = 0; i < formData.value.roomTypes.length; i++) {
     const rt = formData.value.roomTypes[i]
-    if (rt && (!rt.name || !rt.facility || rt.capacity <= 0 || rt.price <= 0 || rt.floor < 0 || rt.roomCount <= 0)) {
-      errorMessage.value = `Please complete all fields for room type ${i + 1}`
+    
+    // Skip if room type is undefined
+    if (!rt) {
+      errorMessage.value = `Room type ${i + 1} is invalid`
       return
+    }
+    
+    // For existing room types (with roomTypeId), only validate editable fields
+    if (rt.roomTypeId) {
+      if (!rt.name || !rt.facility || rt.capacity <= 0 || rt.price <= 0) {
+        errorMessage.value = `Please complete all editable fields for room type ${i + 1}`
+        return
+      }
+    } else {
+      // For new room types, validate all fields including floor and roomCount
+      if (!rt.name || !rt.facility || rt.capacity <= 0 || rt.price <= 0 || rt.floor < 0 || rt.roomCount <= 0) {
+        errorMessage.value = `Please complete all fields for room type ${i + 1}`
+        return
+      }
     }
   }
 
@@ -294,13 +343,36 @@ const submitForm = async () => {
     console.log('Submitting payload:', formData.value)
     
     if (isEditMode.value) {
-      // For update, send only basic fields (backend doesn't update room types via this endpoint)
+      // For update, send property fields and room types
+      // Existing room types: send only editable fields (no floor/roomCount)
+      // New room types: send all fields including floor/roomCount
       const updatePayload: any = {
         propertyId: route.params.id as string,
         propertyName: formData.value.propertyName,
         address: formData.value.address,
         description: formData.value.description,
-        province: Number(formData.value.province)
+        province: Number(formData.value.province),
+        roomTypes: formData.value.roomTypes.map(rt => {
+          const roomTypeData: any = {
+            name: rt.name,
+            facility: rt.facility,
+            capacity: Number(rt.capacity),
+            price: Number(rt.price),
+            description: rt.description
+          }
+          
+          // For existing room types, include roomTypeId and floor (but not roomCount)
+          if (rt.roomTypeId) {
+            roomTypeData.roomTypeId = rt.roomTypeId
+            roomTypeData.floor = Number(rt.floor)
+          } else {
+            // For new room types, include floor and roomCount
+            roomTypeData.floor = Number(rt.floor)
+            roomTypeData.roomCount = Number(rt.roomCount)
+          }
+          
+          return roomTypeData
+        })
       }
       
       await propertyService.update(updatePayload)
@@ -424,6 +496,18 @@ input, select, textarea {
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: #4caf50;
+}
+
+.disabled-input {
+  background-color: #f0f0f0 !important;
+  color: #666 !important;
+  cursor: not-allowed !important;
+}
+
+input:disabled, select:disabled {
+  background-color: #f0f0f0;
+  color: #666;
+  cursor: not-allowed;
 }
 
 .room-type-section {

@@ -65,9 +65,9 @@
       <!-- Booking Dates -->
       <div class="form-row">
         <div class="form-group">
-          <label for="checkInDate">Check-in Date & Time *</label>
+          <label for="checkInDate">Check-in Date *</label>
           <input
-            type="datetime-local"
+            type="date"
             id="checkInDate"
             v-model="formData.checkInDate"
             required
@@ -75,9 +75,9 @@
           />
         </div>
         <div class="form-group">
-          <label for="checkOutDate">Check-out Date & Time *</label>
+          <label for="checkOutDate">Check-out Date *</label>
           <input
-            type="datetime-local"
+            type="date"
             id="checkOutDate"
             v-model="formData.checkOutDate"
             required
@@ -206,8 +206,8 @@ const isRoomPrefilled = ref(!!prefilledRoomId)
 
 const formData = reactive({
   roomId: prefilledRoomId || '',
-  checkInDate: '',
-  checkOutDate: '',
+  checkInDate: (route.query.checkIn as string) || '',
+  checkOutDate: (route.query.checkOut as string) || '',
   customerId: uuidv4(), // Auto-generate
   customerName: '',
   customerEmail: '',
@@ -218,8 +218,7 @@ const formData = reactive({
 
 const minDate = computed(() => {
   const today = new Date()
-  today.setMinutes(today.getMinutes() - today.getTimezoneOffset())
-  return today.toISOString().slice(0, 16)
+  return today.toISOString().split('T')[0]
 })
 
 const pricePreview = computed(() => {

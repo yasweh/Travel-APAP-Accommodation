@@ -9,13 +9,35 @@
       <div class="form-group">
         <label>Property *</label>
         <input type="text" :value="propertyName" readonly disabled />
-        <small>Property ID: {{ propertyId }}</small>
+        <small>Property ID: {{ propertyId }} | Type: {{ getPropertyTypeString() }}</small>
       </div>
+
+      <!-- Show Existing Room Types Info -->
+      <div v-if="existingRoomTypes.length > 0" class="info-section">
+        <h3>Existing Room Types ({{ existingRoomTypes.length }})</h3>
+        <div class="existing-room-types">
+          <div v-for="rt in existingRoomTypes" :key="rt.roomTypeId" class="existing-room-type-card">
+            <div class="card-header">
+              <strong>{{ rt.name }}</strong>
+              <span class="badge">Floor {{ rt.floor }}</span>
+            </div>
+            <div class="card-body">
+              <p><strong>Rooms:</strong> {{ rt.listRoom?.length || 0 }} rooms</p>
+              <p><strong>Capacity:</strong> {{ rt.capacity }} persons | <strong>Price:</strong> Rp {{ rt.price?.toLocaleString() }}</p>
+              <p><strong>Facility:</strong> {{ rt.facility }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Add New Room Types Section -->
+      <div class="section-title">Add New Room Types</div>
+      <p class="section-note">Add new room types to this property</p>
 
       <!-- Room Types List -->
       <div v-for="(roomType, index) in formData.roomTypes" :key="index" class="room-type-section">
         <div class="room-type-header">
-          <h3>Room Type {{ index + 1 }}</h3>
+          <h3>New Room Type {{ index + 1 }}</h3>
           <button 
             v-if="formData.roomTypes.length > 1" 
             type="button" 
@@ -29,12 +51,31 @@
         <div class="form-row">
           <div class="form-group">
             <label>Room Type Name *</label>
-            <input
-              type="text"
-              v-model="roomType.name"
-              required
-              placeholder="e.g., Deluxe Room, Suite"
-            />
+            <select v-model="roomType.name" required>
+              <option value="">Select Room Type</option>
+              <optgroup v-if="propertyType === 0" label="Hotel Room Types">
+                <option value="Single Room">Single Room</option>
+                <option value="Double Room">Double Room</option>
+                <option value="Deluxe Room">Deluxe Room</option>
+                <option value="Superior Room">Superior Room</option>
+                <option value="Suite">Suite</option>
+                <option value="Family Room">Family Room</option>
+              </optgroup>
+              <optgroup v-if="propertyType === 1" label="Villa Room Types">
+                <option value="Luxury">Luxury</option>
+                <option value="Beachfront">Beachfront</option>
+                <option value="Mountside">Mountside</option>
+                <option value="Eco-friendly">Eco-friendly</option>
+                <option value="Romantic">Romantic</option>
+              </optgroup>
+              <optgroup v-if="propertyType === 2" label="Apartment Room Types">
+                <option value="Studio">Studio</option>
+                <option value="1BR">1BR</option>
+                <option value="2BR">2BR</option>
+                <option value="3BR">3BR</option>
+                <option value="Penthouse">Penthouse</option>
+              </optgroup>
+            </select>
           </div>
 
           <div class="form-group">
@@ -143,6 +184,8 @@ interface RoomTypeForm {
 
 const propertyId = ref('')
 const propertyName = ref('')
+const propertyType = ref<number | null>(null)
+const existingRoomTypes = ref<any[]>([])
 const loading = ref(false)
 const submitting = ref(false)
 const error = ref('')
@@ -196,6 +239,12 @@ const loadProperty = async () => {
     if (response.success) {
       // Backend returns: { success, property, roomTypes, rooms }
       propertyName.value = response.property.propertyName
+      propertyType.value = response.property.type
+      
+      // Load existing room types
+      if (response.roomTypes && response.roomTypes.length > 0) {
+        existingRoomTypes.value = response.roomTypes
+      }
     } else {
       error.value = response.message || 'Failed to load property'
     }
@@ -204,6 +253,13 @@ const loadProperty = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const getPropertyTypeString = () => {
+  if (propertyType.value === 0) return 'Hotel'
+  if (propertyType.value === 1) return 'Villa'
+  if (propertyType.value === 2) return 'Apartemen'
+  return 'Unknown'
 }
 
 const submitForm = async () => {
@@ -296,6 +352,75 @@ h1 {
   padding: 30px;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.info-section {
+  background: #f0f8ff;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 30px;
+  border-left: 4px solid #2196f3;
+}
+
+.info-section h3 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 18px;
+}
+
+.existing-room-types {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 15px;
+}
+
+.existing-room-type-card {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.existing-room-type-card .card-header {
+  background: #2196f3;
+  color: white;
+  padding: 10px 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.existing-room-type-card .badge {
+  background: rgba(255, 255, 255, 0.3);
+  padding: 3px 8px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.existing-room-type-card .card-body {
+  padding: 15px;
+}
+
+.existing-room-type-card .card-body p {
+  margin: 5px 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.section-title {
+  font-size: 20px;
+  font-weight: bold;
+  color: #333;
+  margin: 30px 0 15px 0;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #4caf50;
+}
+
+.section-note {
+  color: #666;
+  font-size: 14px;
+  margin: -10px 0 20px 0;
+  font-style: italic;
 }
 
 .form-group {
