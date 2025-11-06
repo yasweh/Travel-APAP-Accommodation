@@ -5,7 +5,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Data
@@ -18,8 +17,9 @@ public class BookingRequestDTO {
     private String propertyId; // For cascading dropdown
     private String roomTypeId; // For cascading dropdown
     
-    private LocalDateTime checkInDate;
-    private LocalDateTime checkOutDate;
+    // Changed to String to accept "2025-11-06" format from frontend
+    private String checkInDate;
+    private String checkOutDate;
     
     private UUID customerId;
     private String customerName;

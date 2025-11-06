@@ -15,4 +15,9 @@ public interface RoomTypeRepository extends JpaRepository<RoomType, String> {
      * Check if room type with same name and floor exists in property
      */
     boolean existsByProperty_PropertyIdAndNameAndFloor(String propertyId, String name, Integer floor);
+    
+    /**
+     * Find room type by property, name and floor
+     */
+    RoomType findByProperty_PropertyIdAndNameAndFloor(String propertyId, String name, Integer floor);
 }

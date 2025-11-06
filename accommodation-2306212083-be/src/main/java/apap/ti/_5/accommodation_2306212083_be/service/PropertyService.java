@@ -5,6 +5,7 @@ import apap.ti._5.accommodation_2306212083_be.model.Property;
 import apap.ti._5.accommodation_2306212083_be.model.RoomType;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -19,7 +20,7 @@ public interface PropertyService {
     void updatePropertyIncome(String propertyId, Integer amount);
     
     // New methods for advanced features
-    Property updatePropertyWithRoomTypes(Property updatedProperty, List<RoomType> updatedRoomTypes);
+    Property updatePropertyWithRoomTypes(Property updatedProperty, List<RoomType> updatedRoomTypes, Map<String, Integer> roomCountMap);
     void softDeleteProperty(String propertyId);
     List<PropertyStatisticsDTO> getMonthlyStatistics(int month, int year);
 }

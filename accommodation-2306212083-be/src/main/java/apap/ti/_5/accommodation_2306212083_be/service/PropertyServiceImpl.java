@@ -76,10 +76,11 @@ public class PropertyServiceImpl implements PropertyService {
                 // Get current room number for this floor
                 int roomNumber = floorRoomCounter.get(floor);
                 
-                // Generate room name: FloorXX (e.g., 201, 202, ..., 210, 211, ...)
-                String roomName = String.format("%d%02d", floor, roomNumber);
+                // Generate room name: Room FloorXX (e.g., Room 201, Room 202, ..., Room 210, Room 211, ...)
+                String roomNumber_str = String.format("%d%02d", floor, roomNumber);
+                String roomName = "Room " + roomNumber_str;
                 
-                room.setRoomId(propertyId + "-ROOM-" + roomName);
+                room.setRoomId(propertyId + "-ROOM-" + roomNumber_str);
                 room.setName(roomName);
                 room.setRoomType(savedRoomType);
                 room.setAvailabilityStatus(1);
@@ -153,7 +154,7 @@ public class PropertyServiceImpl implements PropertyService {
     }
 
     @Override
-    public Property updatePropertyWithRoomTypes(Property updatedProperty, List<RoomType> updatedRoomTypes) {
+    public Property updatePropertyWithRoomTypes(Property updatedProperty, List<RoomType> updatedRoomTypes, Map<String, Integer> roomCountMap) {
         Optional<Property> existingOpt = propertyRepository.findById(updatedProperty.getPropertyId());
         if (!existingOpt.isPresent()) {
             throw new RuntimeException("Property not found");
@@ -169,32 +170,108 @@ public class PropertyServiceImpl implements PropertyService {
         
         Property savedProperty = propertyRepository.save(existing);
         
+        // Build a map of existing room numbers per floor for continuous numbering
+        Map<Integer, Integer> floorRoomCounter = new HashMap<>();
+        
+        // Get all existing rooms for this property to find the highest room number per floor
+        List<Room> existingRooms = roomRepository.findByRoomType_Property_PropertyId(savedProperty.getPropertyId());
+        for (Room room : existingRooms) {
+            try {
+                // Extract floor and room number from room name (e.g., "Room 201" -> floor 2, number 01)
+                String roomName = room.getName();
+                if (roomName != null && roomName.startsWith("Room ")) {
+                    // Remove "Room " prefix
+                    String numberPart = roomName.substring(5); // "Room " is 5 characters
+                    if (numberPart.length() >= 2) {
+                        int floor = Integer.parseInt(numberPart.substring(0, numberPart.length() - 2));
+                        int roomNum = Integer.parseInt(numberPart.substring(numberPart.length() - 2));
+                        
+                        // Update counter to next available number
+                        floorRoomCounter.put(floor, Math.max(floorRoomCounter.getOrDefault(floor, 0), roomNum + 1));
+                    }
+                }
+            } catch (NumberFormatException e) {
+                // Skip rooms with non-standard naming
+            }
+        }
+        
         // Update room types
         if (updatedRoomTypes != null && !updatedRoomTypes.isEmpty()) {
             for (RoomType roomType : updatedRoomTypes) {
-                // Check if room type already exists
-                Optional<RoomType> existingRoomType = roomTypeRepository.findById(roomType.getRoomTypeId());
-                if (existingRoomType.isPresent()) {
-                    // Update existing room type
-                    RoomType rt = existingRoomType.get();
-                    rt.setName(roomType.getName());
-                    rt.setPrice(roomType.getPrice());
-                    rt.setCapacity(roomType.getCapacity());
-                    rt.setFacility(roomType.getFacility());
-                    rt.setFloor(roomType.getFloor());
-                    roomTypeRepository.save(rt);
+                // Check if this is an existing room type (has roomTypeId) or a new one
+                if (roomType.getRoomTypeId() != null && !roomType.getRoomTypeId().isEmpty()) {
+                    // Update existing room type (only editable fields)
+                    Optional<RoomType> existingRoomType = roomTypeRepository.findById(roomType.getRoomTypeId());
+                    if (existingRoomType.isPresent()) {
+                        RoomType rt = existingRoomType.get();
+                        rt.setName(roomType.getName());
+                        rt.setPrice(roomType.getPrice());
+                        rt.setCapacity(roomType.getCapacity());
+                        rt.setFacility(roomType.getFacility());
+                        rt.setDescription(roomType.getDescription());
+                        rt.setUpdatedDate(LocalDateTime.now());
+                        roomTypeRepository.save(rt);
+                    }
                 } else {
-                    // Validate duplicate: same property + name + floor
-                    if (roomTypeRepository.existsByProperty_PropertyIdAndNameAndFloor(
-                            savedProperty.getPropertyId(), roomType.getName(), roomType.getFloor())) {
-                        throw new RuntimeException("Room type with same name and floor already exists");
+                    // This is a new room type - check if room type with same name and floor already exists
+                    Integer floor = roomType.getFloor();
+                    
+                    // Initialize counter for this floor if not exists
+                    if (!floorRoomCounter.containsKey(floor)) {
+                        floorRoomCounter.put(floor, 1);
                     }
                     
-                    // Add new room type
-                    roomType.setProperty(savedProperty);
-                    String roomTypeId = idGenerator.generateRoomTypeId(savedProperty, roomType.getName(), roomType.getFloor());
-                    roomType.setRoomTypeId(roomTypeId);
-                    roomTypeRepository.save(roomType);
+                    // Check if room type with same name and floor already exists
+                    RoomType existingRoomType = roomTypeRepository.findByProperty_PropertyIdAndNameAndFloor(
+                            savedProperty.getPropertyId(), roomType.getName(), floor);
+                    
+                    RoomType targetRoomType;
+                    
+                    if (existingRoomType != null) {
+                        // Room type already exists, just add rooms to it
+                        targetRoomType = existingRoomType;
+                        targetRoomType.setUpdatedDate(LocalDateTime.now());
+                        roomTypeRepository.save(targetRoomType);
+                    } else {
+                        // Create new room type
+                        String roomTypeId = idGenerator.generateRoomTypeId(savedProperty, roomType.getName(), floor);
+                        roomType.setRoomTypeId(roomTypeId);
+                        roomType.setProperty(savedProperty);
+                        roomType.setCreatedDate(LocalDateTime.now());
+                        roomType.setUpdatedDate(LocalDateTime.now());
+                        
+                        targetRoomType = roomTypeRepository.save(roomType);
+                    }
+                    
+                    // Get roomCount from the roomCountMap
+                    String key = roomType.getName() + "_" + floor;
+                    Integer roomCount = roomCountMap.getOrDefault(key, 1);
+                    
+                    // Create rooms for this room type with continuous numbering
+                    for (int i = 0; i < roomCount; i++) {
+                        Room room = new Room();
+                        
+                        // Get current room number for this floor
+                        int roomNumber = floorRoomCounter.get(floor);
+                        
+                        // Generate room name: Room FloorXX (e.g., Room 201, Room 202, ..., Room 210, Room 211, ...)
+                        String roomNumber_str = String.format("%d%02d", floor, roomNumber);
+                        String roomName = "Room " + roomNumber_str;
+                        String roomId = savedProperty.getPropertyId() + "-ROOM-" + roomNumber_str;
+                        
+                        room.setRoomId(roomId);
+                        room.setName(roomName);
+                        room.setRoomType(targetRoomType);
+                        room.setAvailabilityStatus(1);
+                        room.setActiveRoom(1);
+                        room.setCreatedDate(LocalDateTime.now());
+                        room.setUpdatedDate(LocalDateTime.now());
+                        
+                        roomRepository.save(room);
+                        
+                        // Increment counter for this floor
+                        floorRoomCounter.put(floor, roomNumber + 1);
+                    }
                 }
             }
         }

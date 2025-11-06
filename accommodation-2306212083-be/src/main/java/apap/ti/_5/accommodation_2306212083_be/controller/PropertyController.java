@@ -199,11 +199,14 @@ public class PropertyController {
             
             // Update province if provided
             if (request.containsKey("province")) {
-                existingProperty.setProvince((Integer) request.get("province"));
+                Object provinceObj = request.get("province");
+                existingProperty.setProvince(provinceObj instanceof Number ? ((Number) provinceObj).intValue() : (Integer) provinceObj);
             }
             
             // Extract and update room types if provided
             List<RoomType> updatedRoomTypes = new ArrayList<>();
+            Map<String, Integer> roomCountMap = new HashMap<>(); // Store roomCount for new room types
+            
             if (request.containsKey("roomTypes") && request.get("roomTypes") != null) {
                 List<Map<String, Object>> roomTypesData = (List<Map<String, Object>>) request.get("roomTypes");
                 for (Map<String, Object> rtData : roomTypesData) {
@@ -215,16 +218,35 @@ public class PropertyController {
                     }
                     
                     rt.setName((String) rtData.get("name"));
-                    rt.setPrice((Integer) rtData.get("price"));
-                    rt.setCapacity((Integer) rtData.get("capacity"));
+                    
+                    // Handle numeric fields with proper type casting
+                    Object priceObj = rtData.get("price");
+                    rt.setPrice(priceObj instanceof Number ? ((Number) priceObj).intValue() : (Integer) priceObj);
+                    
+                    Object capacityObj = rtData.get("capacity");
+                    rt.setCapacity(capacityObj instanceof Number ? ((Number) capacityObj).intValue() : (Integer) capacityObj);
+                    
                     rt.setFacility((String) rtData.get("facility"));
-                    rt.setFloor((Integer) rtData.get("floor"));
+                    
+                    Object floorObj = rtData.get("floor");
+                    rt.setFloor(floorObj instanceof Number ? ((Number) floorObj).intValue() : (Integer) floorObj);
+                    
                     rt.setDescription((String) rtData.get("description"));
+                    
+                    // Store roomCount for new room types (without roomTypeId)
+                    if (rtData.containsKey("roomCount") && rtData.get("roomCount") != null) {
+                        Object roomCountObj = rtData.get("roomCount");
+                        Integer roomCount = roomCountObj instanceof Number ? ((Number) roomCountObj).intValue() : (Integer) roomCountObj;
+                        // Use a temporary key based on name+floor to identify this room type later
+                        String key = rt.getName() + "_" + rt.getFloor();
+                        roomCountMap.put(key, roomCount);
+                    }
+                    
                     updatedRoomTypes.add(rt);
                 }
             }
             
-            Property updated = propertyService.updatePropertyWithRoomTypes(existingProperty, updatedRoomTypes);
+            Property updated = propertyService.updatePropertyWithRoomTypes(existingProperty, updatedRoomTypes, roomCountMap);
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);

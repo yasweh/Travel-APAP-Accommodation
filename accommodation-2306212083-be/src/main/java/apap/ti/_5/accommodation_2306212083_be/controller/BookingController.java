@@ -64,8 +64,7 @@ public class BookingController {
     @GetMapping("/{id}")
     public ResponseEntity<Map<String, Object>> detailBooking(@PathVariable String id) {
         try {
-            AccommodationBooking booking = bookingService.getBookingById(id)
-                .orElseThrow(() -> new RuntimeException("Booking not found"));
+            BookingResponseDTO booking = bookingService.getBookingDetail(id);
             
             // Determine available actions based on status
             Map<String, Boolean> availableActions = new HashMap<>();
@@ -76,7 +75,7 @@ public class BookingController {
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("booking", booking);
+            response.put("data", booking);
             response.put("availableActions", availableActions);
             
             return ResponseEntity.ok(response);
@@ -166,12 +165,23 @@ public class BookingController {
                 .orElseThrow(() -> new RuntimeException("Room not found"));
             
             RoomType roomType = room.getRoomType();
+            RoomDTO roomDTO = mapRoomToDTO(room);
+            
+            // Add property and room type IDs for frontend cascading
+            Map<String, Object> roomData = new HashMap<>();
+            roomData.put("roomId", roomDTO.getRoomId());
+            roomData.put("name", roomDTO.getName());
+            roomData.put("roomTypeName", roomDTO.getRoomTypeName());
+            roomData.put("roomTypePrice", roomDTO.getRoomTypePrice());
+            roomData.put("roomTypeCapacity", roomDTO.getRoomTypeCapacity());
+            roomData.put("roomTypeFacility", roomDTO.getRoomTypeFacility());
+            roomData.put("floor", roomDTO.getFloor());
+            roomData.put("propertyId", roomType.getProperty().getPropertyId());
+            roomData.put("roomTypeId", roomType.getRoomTypeId());
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("room", mapRoomToDTO(room));
-            response.put("roomType", roomType);
-            response.put("property", roomType.getProperty());
+            response.put("data", roomData);
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -232,8 +242,7 @@ public class BookingController {
         try {
             List<Room> rooms = roomRepository.findByRoomType_RoomTypeId(roomTypeId)
                 .stream()
-                .filter(room -> room.getAvailabilityStatus() == 1) // Available only
-                .filter(room -> room.getActiveRoom() == 1) // Active only
+                .filter(room -> room.getAvailabilityStatus() == 1) // Available only (not booked/maintenance)
                 .collect(Collectors.toList());
             
             List<RoomDTO> roomDTOs = rooms.stream()

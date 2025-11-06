@@ -3,15 +3,18 @@ package apap.ti._5.accommodation_2306212083_be.service;
 import apap.ti._5.accommodation_2306212083_be.dto.BookingRequestDTO;
 import apap.ti._5.accommodation_2306212083_be.dto.BookingResponseDTO;
 import apap.ti._5.accommodation_2306212083_be.model.AccommodationBooking;
+import apap.ti._5.accommodation_2306212083_be.model.Customer;
 import apap.ti._5.accommodation_2306212083_be.model.Room;
 import apap.ti._5.accommodation_2306212083_be.model.RoomType;
 import apap.ti._5.accommodation_2306212083_be.repository.AccommodationBookingRepository;
+import apap.ti._5.accommodation_2306212083_be.repository.CustomerRepository;
 import apap.ti._5.accommodation_2306212083_be.repository.RoomRepository;
 import apap.ti._5.accommodation_2306212083_be.util.IdGenerator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -25,6 +28,7 @@ public class BookingServiceImpl implements BookingService {
 
     private final AccommodationBookingRepository bookingRepository;
     private final RoomRepository roomRepository;
+    private final CustomerRepository customerRepository;
     private final PropertyService propertyService;
     private final MaintenanceService maintenanceService;
     private final IdGenerator idGenerator;
@@ -200,17 +204,69 @@ public class BookingServiceImpl implements BookingService {
 
     // ============ NEW DTO-BASED METHODS ============
     
+    /**
+     * Convert date string (yyyy-MM-dd) to LocalDateTime at start of day (00:00:00)
+     */
+    private LocalDateTime parseDate(String dateString) {
+        if (dateString == null || dateString.isEmpty()) {
+            throw new RuntimeException("Date cannot be empty");
+        }
+        try {
+            LocalDate date = LocalDate.parse(dateString);
+            return date.atStartOfDay(); // 00:00:00
+        } catch (Exception e) {
+            throw new RuntimeException("Invalid date format. Expected: yyyy-MM-dd");
+        }
+    }
+    
+    /**
+     * Create or update customer before creating booking
+     */
+    private Customer ensureCustomerExists(BookingRequestDTO request) {
+        UUID customerId = request.getCustomerId();
+        
+        // Check if customer exists
+        Optional<Customer> existingCustomer = customerRepository.findById(customerId);
+        
+        if (existingCustomer.isPresent()) {
+            // Update existing customer info
+            Customer customer = existingCustomer.get();
+            customer.setName(request.getCustomerName());
+            customer.setEmail(request.getCustomerEmail());
+            customer.setPhone(request.getCustomerPhone());
+            customer.setUpdatedDate(LocalDateTime.now());
+            return customerRepository.save(customer);
+        } else {
+            // Create new customer
+            Customer newCustomer = Customer.builder()
+                .customerId(customerId)
+                .name(request.getCustomerName())
+                .email(request.getCustomerEmail())
+                .phone(request.getCustomerPhone())
+                .createdDate(LocalDateTime.now())
+                .build();
+            return customerRepository.save(newCustomer);
+        }
+    }
+    
     @Override
     public BookingResponseDTO createBookingWithRoom(String roomId, BookingRequestDTO request) {
+        // Ensure customer exists in database
+        ensureCustomerExists(request);
+        
+        // Parse dates from String to LocalDateTime
+        LocalDateTime checkInDate = parseDate(request.getCheckInDate());
+        LocalDateTime checkOutDate = parseDate(request.getCheckOutDate());
+        
         // Validate room exists
         Room room = roomRepository.findById(roomId)
             .orElseThrow(() -> new RuntimeException("Room not found"));
         
         // Validate dates
-        validateBookingDates(request.getCheckInDate(), request.getCheckOutDate());
+        validateBookingDates(checkInDate, checkOutDate);
         
         // Validate maintenance conflict
-        if (maintenanceService.hasMaintenanceConflict(roomId, request.getCheckInDate(), request.getCheckOutDate())) {
+        if (maintenanceService.hasMaintenanceConflict(roomId, checkInDate, checkOutDate)) {
             throw new RuntimeException("Room has maintenance scheduled during selected dates");
         }
         
@@ -221,7 +277,7 @@ public class BookingServiceImpl implements BookingService {
         }
         
         // Calculate price
-        long days = ChronoUnit.DAYS.between(request.getCheckInDate(), request.getCheckOutDate());
+        long days = ChronoUnit.DAYS.between(checkInDate, checkOutDate);
         int basePrice = roomType.getPrice() * (int) days;
         int breakfastCost = request.getAddOnBreakfast() ? 50000 * (int) days : 0;
         int totalPrice = basePrice + breakfastCost;
@@ -230,8 +286,8 @@ public class BookingServiceImpl implements BookingService {
         AccommodationBooking booking = AccommodationBooking.builder()
             .bookingId(idGenerator.generateBookingId(roomId))
             .room(room)
-            .checkInDate(request.getCheckInDate())
-            .checkOutDate(request.getCheckOutDate())
+            .checkInDate(checkInDate)
+            .checkOutDate(checkOutDate)
             .totalDays((int) days)
             .totalPrice(totalPrice)
             .status(0)
@@ -243,9 +299,16 @@ public class BookingServiceImpl implements BookingService {
             .capacity(request.getCapacity())
             .refund(0)
             .extraPay(0)
+            .createdDate(LocalDateTime.now())
+            .updatedDate(LocalDateTime.now())
             .build();
         
         AccommodationBooking saved = bookingRepository.save(booking);
+        
+        // Update room availability status to 0 (Not Available/Booked)
+        room.setAvailabilityStatus(0);
+        room.setUpdatedDate(LocalDateTime.now());
+        roomRepository.save(room);
         
         return mapToResponseDTO(saved);
     }
@@ -266,19 +329,23 @@ public class BookingServiceImpl implements BookingService {
             throw new RuntimeException("Cannot update booking with extra payment or refund");
         }
         
+        // Parse dates from String to LocalDateTime
+        LocalDateTime checkInDate = parseDate(request.getCheckInDate());
+        LocalDateTime checkOutDate = parseDate(request.getCheckOutDate());
+        
         // Validate dates
-        validateBookingDates(request.getCheckInDate(), request.getCheckOutDate());
+        validateBookingDates(checkInDate, checkOutDate);
         
         // Validate maintenance conflict
         if (maintenanceService.hasMaintenanceConflict(existing.getRoom().getRoomId(), 
-                request.getCheckInDate(), request.getCheckOutDate())) {
+                checkInDate, checkOutDate)) {
             throw new RuntimeException("Room has maintenance scheduled during selected dates");
         }
         
         // Calculate new price
         Room room = existing.getRoom();
         RoomType roomType = room.getRoomType();
-        long days = ChronoUnit.DAYS.between(request.getCheckInDate(), request.getCheckOutDate());
+        long days = ChronoUnit.DAYS.between(checkInDate, checkOutDate);
         int basePrice = roomType.getPrice() * (int) days;
         int breakfastCost = request.getAddOnBreakfast() ? 50000 * (int) days : 0;
         int newTotalPrice = basePrice + breakfastCost;
@@ -286,8 +353,8 @@ public class BookingServiceImpl implements BookingService {
         int oldTotalPrice = existing.getTotalPrice();
         
         // Update fields
-        existing.setCheckInDate(request.getCheckInDate());
-        existing.setCheckOutDate(request.getCheckOutDate());
+        existing.setCheckInDate(checkInDate);
+        existing.setCheckOutDate(checkOutDate);
         existing.setTotalDays((int) days);
         existing.setTotalPrice(newTotalPrice);
         existing.setIsBreakfast(request.getAddOnBreakfast());
@@ -316,18 +383,27 @@ public class BookingServiceImpl implements BookingService {
         AccommodationBooking booking = bookingRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("Booking not found"));
         
-        String propertyId = booking.getRoom().getRoomType().getProperty().getPropertyId();
+        Room room = booking.getRoom();
+        String propertyId = room.getRoomType().getProperty().getPropertyId();
         
         if (booking.getExtraPay() > 0) {
             // Pay extra payment
             propertyService.updatePropertyIncome(propertyId, booking.getExtraPay());
             booking.setExtraPay(0);
-        } else {
-            // Pay full booking
+        } else if (booking.getStatus() == 0) {
+            // Pay full booking - change status from Waiting (0) to Paid (1)
             booking.setStatus(1);
+            
+            // Update property income/revenue
             propertyService.updatePropertyIncome(propertyId, booking.getTotalPrice());
+            
+            // Set room back to available (payment confirmed)
+            room.setAvailabilityStatus(1);
+            room.setUpdatedDate(LocalDateTime.now());
+            roomRepository.save(room);
         }
         
+        booking.setUpdatedDate(LocalDateTime.now());
         bookingRepository.save(booking);
     }
 
