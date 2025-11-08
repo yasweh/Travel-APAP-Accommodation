@@ -4,6 +4,9 @@ export interface BookingResponseDTO {
   bookingId: string
   roomId: string
   roomName: string
+  roomTypeId: string
+  roomTypeName: string
+  propertyId: string
   propertyName: string
   checkInDate: string
   checkOutDate: string
@@ -117,10 +120,15 @@ export const bookingService = {
   },
 
   // Get available rooms (cascading step 3)
-  async getAvailableRooms(propertyId: string, roomTypeId: string) {
-    const response = await api.get<{ success: boolean; message: string; data: RoomDTO[] }>(
-      `/bookings/rooms/${propertyId}/${roomTypeId}`
-    )
+  async getAvailableRooms(propertyId: string, roomTypeId: string, checkInDate?: string, checkOutDate?: string) {
+    let url = `/bookings/rooms/${propertyId}/${roomTypeId}`
+    
+    // Add date parameters if provided
+    if (checkInDate && checkOutDate) {
+      url += `?checkInDate=${checkInDate}&checkOutDate=${checkOutDate}`
+    }
+    
+    const response = await api.get<{ success: boolean; message: string; data: RoomDTO[] }>(url)
     return response.data
   },
 
@@ -136,7 +144,12 @@ export const bookingService = {
 
   // Get booking for update
   async getForUpdate(id: string) {
-    const response = await api.get<{ success: boolean; message: string; data: any }>(
+    const response = await api.get<{ 
+      success: boolean
+      message: string
+      booking: BookingResponseDTO
+      properties: any[]
+    }>(
       `/bookings/update/${id}`
     )
     return response.data

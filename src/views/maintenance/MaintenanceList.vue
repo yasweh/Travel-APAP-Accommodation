@@ -2,16 +2,28 @@
   <div class="maintenance-list">
     <h1>Maintenance Management</h1>
 
-    <!-- Room Selection -->
-    <div class="room-selector">
-      <label for="roomId">Search by Room ID:</label>
-      <input
-        type="text"
-        id="roomId"
-        v-model="searchRoomId"
-        placeholder="e.g., APT-0000-004-101"
-      />
-      <button @click="loadMaintenances" class="btn-primary">Search</button>
+    <!-- Filter Dropdowns -->
+    <div class="filter-selector">
+      <div class="filter-group">
+        <label for="roomTypeId">Filter by Room Type:</label>
+        <select id="roomTypeId" v-model="selectedRoomTypeId" @change="onRoomTypeChange">
+          <option value="">-- All Room Types --</option>
+          <option v-for="roomType in roomTypes" :key="roomType.roomTypeId" :value="roomType.roomTypeId">
+            {{ roomType.name }} (Floor {{ roomType.floor }})
+          </option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="roomId">Filter by Room:</label>
+        <select id="roomId" v-model="selectedRoomId" @change="loadMaintenances" :disabled="!selectedRoomTypeId">
+          <option value="">-- All Rooms --</option>
+          <option v-for="room in rooms" :key="room.roomId" :value="room.roomId">
+            {{ room.roomNumber }}
+          </option>
+        </select>
+      </div>
+
       <button @click="goToCreateMaintenance" class="btn-secondary">Add New Schedule</button>
     </div>
 
@@ -28,59 +40,109 @@
       <thead>
         <tr>
           <th>Maintenance ID</th>
+          <th>Property</th>
+          <th>Room Type</th>
           <th>Room</th>
           <th>Start Date</th>
           <th>Start Time</th>
           <th>End Date</th>
           <th>End Time</th>
-          <th>Description</th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="maintenance in maintenances" :key="maintenance.maintenanceId">
           <td>{{ maintenance.maintenanceId }}</td>
-          <td>{{ maintenance.room.name }} ({{ maintenance.room.roomId }})</td>
-          <td>{{ formatDate(maintenance.startMaintenanceDate) }}</td>
-          <td>{{ formatTime(maintenance.startMaintenanceTime) }}</td>
-          <td>{{ formatDate(maintenance.endMaintenanceDate) }}</td>
-          <td>{{ formatTime(maintenance.endMaintenanceTime) }}</td>
-          <td>{{ maintenance.description }}</td>
+          <td>{{ maintenance.propertyName }}</td>
+          <td>{{ maintenance.roomTypeName }}</td>
+          <td>{{ maintenance.roomName }}</td>
+          <td>{{ formatDate(maintenance.startDate) }}</td>
+          <td>{{ maintenance.startTime }}</td>
+          <td>{{ formatDate(maintenance.endDate) }}</td>
+          <td>{{ maintenance.endTime }}</td>
         </tr>
       </tbody>
     </table>
 
     <!-- Empty State -->
-    <div v-else-if="searchRoomId" class="empty-state">
-      <p>No maintenance schedules found for this room.</p>
-    </div>
     <div v-else class="empty-state">
-      <p>Enter a Room ID to view maintenance schedules.</p>
+      <p>No maintenance schedules found.</p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { maintenanceService, type Maintenance } from '@/services/maintenanceService'
+import { roomTypeService, type RoomType } from '@/services/roomTypeService'
 
 const router = useRouter()
 
 const maintenances = ref<Maintenance[]>([])
-const searchRoomId = ref('')
+const roomTypes = ref<RoomType[]>([])
+const rooms = ref<any[]>([])
+const selectedRoomTypeId = ref('')
+const selectedRoomId = ref('')
 const loading = ref(false)
 const error = ref('')
 
-const loadMaintenances = async () => {
-  if (!searchRoomId.value.trim()) {
-    error.value = 'Please enter a Room ID'
-    return
+// Load all room types on mount
+const loadRoomTypes = async () => {
+  try {
+    const response = await roomTypeService.getAll()
+    if (response.data) {
+      roomTypes.value = response.data
+    }
+  } catch (err: any) {
+    console.error('Load room types error:', err)
   }
+}
 
+// When room type is selected, load rooms for that room type
+const onRoomTypeChange = () => {
+  selectedRoomId.value = '' // Reset room selection
+  if (selectedRoomTypeId.value) {
+    loadRoomsByRoomType()
+  } else {
+    rooms.value = []
+    loadMaintenances() // Show all if no filter
+  }
+}
+
+// Load rooms by room type
+const loadRoomsByRoomType = async () => {
+  try {
+    const response = await roomTypeService.getById(selectedRoomTypeId.value)
+    if (response.data && response.data.rooms) {
+      rooms.value = response.data.rooms
+    } else {
+      rooms.value = []
+    }
+    loadMaintenances() // Load maintenances after rooms are loaded
+  } catch (err: any) {
+    console.error('Load rooms error:', err)
+    rooms.value = []
+  }
+}
+
+// Load maintenances based on filters
+const loadMaintenances = async () => {
   loading.value = true
   error.value = ''
   try {
-    const response = await maintenanceService.getByRoomId(searchRoomId.value)
+    let response
+    
+    if (selectedRoomId.value) {
+      // Filter by specific room
+      response = await maintenanceService.getByRoomId(selectedRoomId.value)
+    } else if (selectedRoomTypeId.value) {
+      // Filter by room type
+      response = await maintenanceService.getByRoomTypeId(selectedRoomTypeId.value)
+    } else {
+      // Show all maintenance schedules
+      response = await maintenanceService.getAll()
+    }
+    
     if (response.success) {
       maintenances.value = response.data
     } else {
@@ -101,6 +163,7 @@ const goToCreateMaintenance = () => {
 }
 
 const formatDate = (dateString: string) => {
+  if (!dateString) return 'N/A'
   return new Date(dateString).toLocaleDateString('id-ID', {
     year: 'numeric',
     month: 'long',
@@ -108,12 +171,10 @@ const formatDate = (dateString: string) => {
   })
 }
 
-const formatTime = (timeString: string) => {
-  return new Date(timeString).toLocaleTimeString('id-ID', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
+onMounted(() => {
+  loadRoomTypes()
+  loadMaintenances() // Load all maintenances by default
+})
 </script>
 
 <style scoped>
@@ -128,9 +189,9 @@ h1 {
   margin-bottom: 20px;
 }
 
-.room-selector {
+.filter-selector {
   display: flex;
-  gap: 10px;
+  gap: 15px;
   align-items: center;
   background: white;
   padding: 15px;
@@ -140,18 +201,31 @@ h1 {
   flex-wrap: wrap;
 }
 
-.room-selector label {
-  font-weight: bold;
-  color: #333;
-}
-
-.room-selector input {
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
   flex: 1;
   min-width: 200px;
+}
+
+.filter-group label {
+  font-weight: bold;
+  color: #333;
+  font-size: 14px;
+}
+
+.filter-group select {
   padding: 8px 12px;
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 14px;
+  background-color: white;
+}
+
+.filter-group select:disabled {
+  background-color: #f5f5f5;
+  cursor: not-allowed;
 }
 
 .btn-primary,
@@ -162,6 +236,7 @@ h1 {
   cursor: pointer;
   font-size: 14px;
   font-weight: bold;
+  align-self: flex-end;
 }
 
 .btn-primary {

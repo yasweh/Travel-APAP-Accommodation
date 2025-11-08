@@ -14,6 +14,13 @@
         </div>
         <div class="header-actions">
           <button 
+            v-if="availableActions.canUpdate" 
+            @click="goToUpdate" 
+            class="btn-update"
+          >
+            Update Booking
+          </button>
+          <button 
             v-if="availableActions.canPay" 
             @click="confirmPayment" 
             class="btn-pay"
@@ -26,6 +33,13 @@
             class="btn-refund"
           >
             Request Refund
+          </button>
+          <button 
+            v-if="booking.status === 3" 
+            @click="processRefund" 
+            class="btn-process-refund"
+          >
+            Process Refund
           </button>
           <button 
             v-if="availableActions.canCancel" 
@@ -259,6 +273,22 @@ const requestRefund = async () => {
   }
 }
 
+const processRefund = async () => {
+  if (!confirm(`Process refund of Rp ${formatCurrency(booking.value.refund)} for this booking? This will reduce property income.`)) return
+
+  try {
+    const response = await bookingService.refund(booking.value.bookingId)
+    if (response.success) {
+      alert('Refund processed successfully! Property income has been updated.')
+      loadBookingDetail()
+    } else {
+      alert(response.message)
+    }
+  } catch (err: any) {
+    alert(err.response?.data?.message || 'Failed to process refund')
+  }
+}
+
 const confirmCancel = async () => {
   if (!confirm('Are you sure you want to cancel this booking?')) return
 
@@ -278,22 +308,28 @@ const confirmCancel = async () => {
 const getStatusClass = (status: number) => {
   if (status === 0) return 'status-waiting'
   if (status === 1) return 'status-confirmed'
-  if (status === 2) return 'status-done'
+  if (status === 2) return 'status-cancelled'
+  if (status === 3) return 'status-cancelled'
+  if (status === 4) return 'status-done'
   return 'status-cancelled'
 }
 
 const getStatusLabel = (status: number) => {
   if (status === 0) return 'Waiting for Payment'
   if (status === 1) return 'Payment Confirmed'
-  if (status === 2) return 'Done'
-  return 'Cancelled / Request Refund'
+  if (status === 2) return 'Cancelled'
+  if (status === 3) return 'Request Refund'
+  if (status === 4) return 'Done'
+  return 'Unknown'
 }
 
 const getStatusDescription = (status: number) => {
   if (status === 0) return 'Please complete the payment to confirm your booking.'
   if (status === 1) return 'Your payment has been confirmed. Enjoy your stay!'
-  if (status === 2) return 'This booking has been completed. Thank you!'
-  return 'This booking has been cancelled or refund has been requested.'
+  if (status === 2) return 'This booking has been cancelled.'
+  if (status === 3) return 'Refund has been requested for this booking.'
+  if (status === 4) return 'This booking has been completed. Thank you!'
+  return 'Unknown status.'
 }
 
 const formatCurrency = (value: number) => {
@@ -313,6 +349,10 @@ const formatDateTime = (dateString: string) => {
 
 const goBack = () => {
   router.push('/booking')
+}
+
+const goToUpdate = () => {
+  router.push(`/booking/update/${booking.value.bookingId}`)
 }
 
 onMounted(() => {
@@ -398,8 +438,10 @@ onMounted(() => {
   flex-wrap: wrap;
 }
 
+.btn-update,
 .btn-pay,
 .btn-refund,
+.btn-process-refund,
 .btn-cancel,
 .btn-secondary {
   padding: 10px 20px;
@@ -409,6 +451,15 @@ onMounted(() => {
   font-size: 14px;
   font-weight: 500;
   transition: all 0.3s;
+}
+
+.btn-update {
+  background: #ff9800;
+  color: white;
+}
+
+.btn-update:hover {
+  background: #f57c00;
 }
 
 .btn-pay {
@@ -427,6 +478,15 @@ onMounted(() => {
 
 .btn-refund:hover {
   background: #0b7dda;
+}
+
+.btn-process-refund {
+  background: #9c27b0;
+  color: white;
+}
+
+.btn-process-refund:hover {
+  background: #7b1fa2;
 }
 
 .btn-cancel {

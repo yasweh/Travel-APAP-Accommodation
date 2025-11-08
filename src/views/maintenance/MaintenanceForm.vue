@@ -14,16 +14,37 @@
 
     <!-- Form -->
     <form @submit.prevent="submitForm" class="form-container">
+      <!-- Property Selection -->
       <div class="form-group">
-        <label for="roomId">Room ID *</label>
-        <input
-          type="text"
-          id="roomId"
-          v-model="formData.roomId"
-          required
-          placeholder="e.g., APT-0000-004-101"
-        />
-        <small>Enter the exact Room ID for maintenance</small>
+        <label for="propertyId">Property *</label>
+        <select id="propertyId" v-model="selectedPropertyId" @change="onPropertyChange" required>
+          <option value="">-- Select Property --</option>
+          <option v-for="property in properties" :key="property.propertyId" :value="property.propertyId">
+            {{ property.propertyName }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Room Type Selection -->
+      <div class="form-group">
+        <label for="roomTypeId">Room Type *</label>
+        <select id="roomTypeId" v-model="selectedRoomTypeId" @change="onRoomTypeChange" required :disabled="!selectedPropertyId">
+          <option value="">-- Select Room Type --</option>
+          <option v-for="roomType in roomTypes" :key="roomType.roomTypeId" :value="roomType.roomTypeId">
+            {{ roomType.name }} (Floor {{ roomType.floor }})
+          </option>
+        </select>
+      </div>
+
+      <!-- Room Selection -->
+      <div class="form-group">
+        <label for="roomId">Room *</label>
+        <select id="roomId" v-model="formData.roomId" required :disabled="!selectedRoomTypeId">
+          <option value="">-- Select Room --</option>
+          <option v-for="room in rooms" :key="room.roomId" :value="room.roomId">
+            {{ room.roomNumber || room.name }}
+          </option>
+        </select>
       </div>
 
       <div class="form-row">
@@ -32,14 +53,14 @@
           <input
             type="date"
             id="startDate"
-            v-model="formData.startMaintenanceDate"
+            v-model="formData.startDate"
             required
             :min="minDate"
           />
         </div>
         <div class="form-group">
           <label for="startTime">Start Time *</label>
-          <input type="time" id="startTime" v-model="formData.startMaintenanceTime" required />
+          <input type="time" id="startTime" v-model="formData.startTime" required />
         </div>
       </div>
 
@@ -49,14 +70,14 @@
           <input
             type="date"
             id="endDate"
-            v-model="formData.endMaintenanceDate"
+            v-model="formData.endDate"
             required
-            :min="formData.startMaintenanceDate"
+            :min="formData.startDate"
           />
         </div>
         <div class="form-group">
           <label for="endTime">End Time *</label>
-          <input type="time" id="endTime" v-model="formData.endMaintenanceTime" required />
+          <input type="time" id="endTime" v-model="formData.endTime" required />
         </div>
       </div>
 
@@ -71,9 +92,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { maintenanceService, type MaintenanceCreateDTO } from '@/services/maintenanceService'
+import { propertyService, type Property } from '@/services/propertyService'
+import { roomTypeService, type RoomType } from '@/services/roomTypeService'
 
 const router = useRouter()
 
@@ -81,18 +104,74 @@ const submitting = ref(false)
 const error = ref('')
 const successMessage = ref('')
 
+const properties = ref<Property[]>([])
+const roomTypes = ref<RoomType[]>([])
+const rooms = ref<any[]>([])
+const selectedPropertyId = ref('')
+const selectedRoomTypeId = ref('')
+
 const formData = reactive({
   roomId: '',
-  startMaintenanceDate: '',
-  startMaintenanceTime: '08:00',
-  endMaintenanceDate: '',
-  endMaintenanceTime: '17:00',
+  startDate: '',
+  startTime: '08:00',
+  endDate: '',
+  endTime: '17:00',
 })
 
 const minDate = computed(() => {
   const today = new Date()
   return today.toISOString().split('T')[0]
 })
+
+const loadProperties = async () => {
+  try {
+    const response = await propertyService.getAll()
+    if (response.success) {
+      properties.value = response.data
+    }
+  } catch (err) {
+    console.error('Load properties error:', err)
+  }
+}
+
+const onPropertyChange = async () => {
+  selectedRoomTypeId.value = ''
+  formData.roomId = ''
+  rooms.value = []
+  
+  if (!selectedPropertyId.value) {
+    roomTypes.value = []
+    return
+  }
+
+  try {
+    const response = await roomTypeService.getByPropertyId(selectedPropertyId.value)
+    if (response.success) {
+      roomTypes.value = response.data
+    }
+  } catch (err) {
+    console.error('Load room types error:', err)
+  }
+}
+
+const onRoomTypeChange = async () => {
+  formData.roomId = ''
+  
+  if (!selectedRoomTypeId.value) {
+    rooms.value = []
+    return
+  }
+
+  try {
+    const response = await roomTypeService.getById(selectedRoomTypeId.value)
+    if (response.success && response.data.listRoom) {
+      // Filter only active rooms (activeRoom = 1)
+      rooms.value = response.data.listRoom.filter((room: any) => room.activeRoom === 1)
+    }
+  } catch (err) {
+    console.error('Load rooms error:', err)
+  }
+}
 
 const submitForm = async () => {
   submitting.value = true
@@ -102,10 +181,10 @@ const submitForm = async () => {
   try {
     const maintenanceData: MaintenanceCreateDTO = {
       roomId: formData.roomId,
-      startDate: formData.startMaintenanceDate,
-      startTime: formData.startMaintenanceTime,
-      endDate: formData.endMaintenanceDate,
-      endTime: formData.endMaintenanceTime,
+      startDate: formData.startDate,
+      startTime: formData.startTime,
+      endDate: formData.endDate,
+      endTime: formData.endTime,
     }
 
     const response = await maintenanceService.create(maintenanceData)
@@ -128,6 +207,10 @@ const submitForm = async () => {
 const goBack = () => {
   router.push('/maintenance')
 }
+
+onMounted(() => {
+  loadProperties()
+})
 </script>
 
 <style scoped>

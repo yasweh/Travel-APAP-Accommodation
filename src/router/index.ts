@@ -43,16 +43,7 @@ const router = createRouter({
       name: 'room-type-list',
       component: () => import('../views/room-type/RoomTypeList.vue'),
     },
-    {
-      path: '/room-type/create',
-      name: 'room-type-create',
-      component: () => import('../views/room-type/RoomTypeForm.vue'),
-    },
-    {
-      path: '/room-type/create/:propertyId',
-      name: 'room-type-create-for-property',
-      component: () => import('../views/room-type/RoomTypeForm.vue'),
-    },
+    
 
     // Booking Management
     {

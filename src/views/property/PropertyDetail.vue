@@ -321,7 +321,8 @@ const goToEdit = () => {
 }
 
 const goToAddRoom = () => {
-  router.push(`/room-type/create?propertyId=${property.value.propertyId}`)
+  // Redirect to property update form (single source of truth)
+  router.push(`/property/edit/${property.value.propertyId}`)
 }
 
 const confirmDelete = async () => {

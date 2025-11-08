@@ -56,22 +56,6 @@
             >
               Detail
             </button>
-            <button @click="goToUpdate(booking.bookingId)" class="btn-edit" v-if="booking.status === 0">
-              Edit
-            </button>
-            <button @click="confirmPayment(booking.bookingId)" class="btn-pay" v-if="booking.status === 0">
-              Pay
-            </button>
-            <button
-              @click="cancelBooking(booking.bookingId)"
-              class="btn-cancel"
-              v-if="booking.status === 0 || booking.status === 1"
-            >
-              Cancel
-            </button>
-            <button @click="refundBooking(booking.bookingId)" class="btn-refund" v-if="booking.status === 1">
-              Refund
-            </button>
           </td>
         </tr>
       </tbody>

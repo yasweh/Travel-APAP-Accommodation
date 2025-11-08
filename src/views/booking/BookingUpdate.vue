@@ -1,6 +1,17 @@
 <template>
   <div class="booking-update">
     <h1>Update Booking</h1>
+    
+    <!-- Info Box -->
+    <div class="info-box">
+      <strong>ℹ️ Update Rules:</strong>
+      <ul>
+        <li>✅ You can update: Check-in/out dates, Capacity, Breakfast, and Customer information</li>
+        <li>🔒 You cannot change: Property, Room Type, or Room</li>
+        <li>💰 If total amount increases → Extra payment required (status: Waiting for Payment)</li>
+        <li>💵 If total amount decreases → Refund will be processed (status: Request Refund)</li>
+      </ul>
+    </div>
 
     <!-- Error Message -->
     <div v-if="error" class="error-message">
@@ -17,66 +28,43 @@
 
     <!-- Form -->
     <form v-else @submit.prevent="submitForm" class="form-container">
-      <!-- Property Dropdown -->
+      <!-- Property Display (Read-only) -->
       <div class="form-group">
         <label for="property">Property *</label>
-        <select 
-          id="property" 
-          v-model="selectedPropertyId" 
-          @change="onPropertyChange" 
-          required
-        >
-          <option value="">-- Select Property --</option>
-          <option 
-            v-for="prop in properties" 
-            :key="prop.propertyId" 
-            :value="prop.propertyId"
-          >
-            {{ prop.propertyName }}
-          </option>
-        </select>
+        <input
+          type="text"
+          id="property"
+          :value="displayInfo.propertyName"
+          disabled
+          class="readonly-field"
+        />
+        <small style="color: #666;">Property cannot be changed when updating</small>
       </div>
 
-      <!-- Room Type Dropdown -->
+      <!-- Room Type Display (Read-only) -->
       <div class="form-group">
         <label for="roomType">Room Type *</label>
-        <select 
-          id="roomType" 
-          v-model="selectedRoomTypeId" 
-          @change="onRoomTypeChange" 
-          required
-          :disabled="!selectedPropertyId"
-        >
-          <option value="">-- Select Room Type --</option>
-          <option 
-            v-for="rt in roomTypes" 
-            :key="rt.roomTypeId" 
-            :value="rt.roomTypeId"
-          >
-            {{ rt.roomTypeName }}
-          </option>
-        </select>
+        <input
+          type="text"
+          id="roomType"
+          :value="displayInfo.roomTypeName"
+          disabled
+          class="readonly-field"
+        />
+        <small style="color: #666;">Room type cannot be changed when updating</small>
       </div>
 
-      <!-- Room Name Dropdown -->
+      <!-- Room Name Display (Read-only) -->
       <div class="form-group">
         <label for="room">Room Name *</label>
-        <select 
-          id="room" 
-          v-model="formData.roomId" 
-          @change="onRoomChange" 
-          required
-          :disabled="!selectedRoomTypeId"
-        >
-          <option value="">-- Select Room --</option>
-          <option 
-            v-for="room in availableRooms" 
-            :key="room.roomId" 
-            :value="room.roomId"
-          >
-            {{ room.name }}
-          </option>
-        </select>
+        <input
+          type="text"
+          id="room"
+          :value="displayInfo.roomName"
+          disabled
+          class="readonly-field"
+        />
+        <small style="color: #666;">Room cannot be changed when updating</small>
       </div>
 
       <!-- Capacity -->
@@ -208,6 +196,13 @@ const selectedPropertyId = ref('')
 const selectedRoomTypeId = ref('')
 const selectedRoom = ref<RoomDTO | null>(null)
 
+// Display info from booking (read-only)
+const displayInfo = reactive({
+  propertyName: '',
+  roomTypeName: '',
+  roomName: '',
+})
+
 const formData = reactive({
   roomId: '',
   checkInDate: '',
@@ -225,6 +220,54 @@ const minDate = computed(() => {
   return today.toISOString().split('T')[0]
 })
 
+// Helper function to convert various date formats to YYYY-MM-DD string
+const convertToDateString = (dateValue: any): string => {
+  if (!dateValue) return ''
+  
+  // If it's already a string in YYYY-MM-DD format
+  if (typeof dateValue === 'string') {
+    // Handle ISO string format (e.g., "2024-01-15T00:00:00")
+    if (dateValue.includes('T')) {
+      const parts = dateValue.split('T')
+      return parts[0] || ''
+    }
+    // Already in YYYY-MM-DD format
+    if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      return dateValue
+    }
+  }
+  
+  // If it's an array [year, month, day] (from Java LocalDate)
+  if (Array.isArray(dateValue) && dateValue.length >= 3) {
+    const [year, month, day] = dateValue
+    // Pad month and day with leading zeros if needed
+    const paddedMonth = String(month).padStart(2, '0')
+    const paddedDay = String(day).padStart(2, '0')
+    return `${year}-${paddedMonth}-${paddedDay}`
+  }
+  
+  // If it's a Date object
+  if (dateValue instanceof Date) {
+    const isoString = dateValue.toISOString()
+    const parts = isoString.split('T')
+    return parts[0] || ''
+  }
+  
+  // Try to parse as Date and convert
+  try {
+    const date = new Date(dateValue)
+    if (!isNaN(date.getTime())) {
+      const isoString = date.toISOString()
+      const parts = isoString.split('T')
+      return parts[0] || ''
+    }
+  } catch (e) {
+    console.error('Failed to parse date:', dateValue, e)
+  }
+  
+  return ''
+}
+
 // Load existing booking data
 const loadBooking = async () => {
   loading.value = true
@@ -234,32 +277,81 @@ const loadBooking = async () => {
     const bookingId = route.params.id as string
     const response = await bookingService.getForUpdate(bookingId)
     
-    if (response.success && response.data) {
-      const booking = response.data
+    console.log('Update booking response:', response)
+    
+    if (response.success && response.booking) {
+      const booking = response.booking
       
-      // Populate form
+      console.log('Raw booking data from backend:', booking)
+      console.log('Check-in date raw:', booking.checkInDate)
+      console.log('Check-out date raw:', booking.checkOutDate)
+      
+      // Store display info from booking response
+      displayInfo.propertyName = booking.propertyName || 'N/A'
+      displayInfo.roomTypeName = booking.roomTypeName || 'N/A'
+      displayInfo.roomName = booking.roomName || 'N/A'
+      
+      // Populate form data
       formData.roomId = booking.roomId
-      formData.checkInDate = booking.checkInDate.split('T')[0]
-      formData.checkOutDate = booking.checkOutDate.split('T')[0]
-      formData.customerId = booking.customerId
+      formData.checkInDate = convertToDateString(booking.checkInDate)
+      formData.checkOutDate = convertToDateString(booking.checkOutDate)
+      
+      console.log('Converted check-in date:', formData.checkInDate)
+      console.log('Converted check-out date:', formData.checkOutDate)
+      
+      formData.customerId = String(booking.customerId)
       formData.customerName = booking.customerName
       formData.customerEmail = booking.customerEmail
       formData.customerPhone = booking.customerPhone
       formData.capacity = booking.capacity
       formData.addOnBreakfast = booking.addOnBreakfast
       
-      // Set selected IDs for dropdowns
-      selectedPropertyId.value = booking.propertyId || ''
-      selectedRoomTypeId.value = booking.roomTypeId || ''
+      // Store IDs for cascading
+      const targetPropertyId = booking.propertyId || ''
+      const targetRoomTypeId = booking.roomTypeId || ''
+      const targetRoomId = booking.roomId
       
-      // Load cascading data
-      await loadProperties()
-      if (selectedPropertyId.value) {
-        await onPropertyChange()
+      // Load properties from response
+      if (response.properties) {
+        properties.value = response.properties
       }
-      if (selectedRoomTypeId.value) {
-        await onRoomTypeChange()
+      
+      // Set property and load room types
+      if (targetPropertyId) {
+        selectedPropertyId.value = targetPropertyId
+        
+        // Load room types for this property
+        try {
+          const rtResponse = await bookingService.getRoomTypesByProperty(targetPropertyId)
+          if (rtResponse.success) {
+            roomTypes.value = rtResponse.data
+          }
+        } catch (err) {
+          console.error('Failed to load room types:', err)
+        }
       }
+      
+      // Set room type and load rooms
+      if (targetRoomTypeId) {
+        selectedRoomTypeId.value = targetRoomTypeId
+        
+        // Load available rooms for this room type
+        try {
+          const roomResponse = await bookingService.getAvailableRooms(
+            targetPropertyId,
+            targetRoomTypeId
+          )
+          if (roomResponse.success) {
+            availableRooms.value = roomResponse.data
+            
+            // Set selected room
+            selectedRoom.value = roomResponse.data.find((r: RoomDTO) => r.roomId === targetRoomId) || null
+          }
+        } catch (err) {
+          console.error('Failed to load rooms:', err)
+        }
+      }
+      
     } else {
       error.value = response.message || 'Failed to load booking'
     }
@@ -374,8 +466,8 @@ const submitForm = async () => {
       roomId: formData.roomId,
       propertyId: selectedPropertyId.value,
       roomTypeId: selectedRoomTypeId.value,
-      checkInDate: formData.checkInDate + 'T00:00:00',
-      checkOutDate: formData.checkOutDate + 'T00:00:00',
+      checkInDate: formData.checkInDate,
+      checkOutDate: formData.checkOutDate,
       customerId: formData.customerId,
       customerName: formData.customerName,
       customerEmail: formData.customerEmail,
@@ -384,12 +476,30 @@ const submitForm = async () => {
       addOnBreakfast: formData.addOnBreakfast,
     }
 
+    console.log('Sending booking data to backend:', bookingData)
+    console.log('Customer data being sent:', {
+      customerId: bookingData.customerId,
+      customerName: bookingData.customerName,
+      customerEmail: bookingData.customerEmail,
+      customerPhone: bookingData.customerPhone,
+    })
+
     const response = await bookingService.update(bookingId, bookingData)
     if (response.success) {
-      successMessage.value = 'Booking updated successfully!'
+      const updatedBooking = response.data
+      
+      // Check for extra payment or refund
+      if (updatedBooking.extraPay > 0) {
+        successMessage.value = `Booking updated successfully! Total price increased. Extra payment required: Rp${formatCurrency(updatedBooking.extraPay)}. Status changed to "Waiting for Payment".`
+      } else if (updatedBooking.refund > 0) {
+        successMessage.value = `Booking updated successfully! Total price decreased. Refund amount: Rp${formatCurrency(updatedBooking.refund)}. Status changed to "Request Refund".`
+      } else {
+        successMessage.value = 'Booking updated successfully!'
+      }
+      
       setTimeout(() => {
         router.push('/booking')
-      }, 1500)
+      }, 3000) // Extended to 3 seconds to read message
     } else {
       error.value = response.message
     }
@@ -403,6 +513,10 @@ const submitForm = async () => {
 
 const goBack = () => {
   router.push('/booking')
+}
+
+const formatCurrency = (value: number) => {
+  return new Intl.NumberFormat('id-ID').format(value)
 }
 
 onMounted(() => {
@@ -420,6 +534,30 @@ onMounted(() => {
 h1 {
   color: #333;
   margin-bottom: 20px;
+}
+
+.info-box {
+  background-color: #e3f2fd;
+  border-left: 4px solid #2196f3;
+  padding: 15px;
+  margin-bottom: 20px;
+  border-radius: 4px;
+}
+
+.info-box strong {
+  display: block;
+  margin-bottom: 10px;
+  color: #1976d2;
+}
+
+.info-box ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.info-box li {
+  margin-bottom: 5px;
+  color: #555;
 }
 
 .error-message {
@@ -487,6 +625,13 @@ h1 {
 .form-group select:disabled {
   background-color: #f5f5f5;
   cursor: not-allowed;
+}
+
+.readonly-field {
+  background-color: #f5f5f5 !important;
+  color: #666 !important;
+  cursor: not-allowed !important;
+  font-weight: 500;
 }
 
 .form-actions {

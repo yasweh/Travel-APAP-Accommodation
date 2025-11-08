@@ -10,9 +10,8 @@ import { RouterView } from 'vue-router'
         <nav class="main-nav">
           <router-link to="/" class="nav-link">Home</router-link>
           <router-link to="/property" class="nav-link">Properties</router-link>
-          <router-link to="/room-type" class="nav-link">Room Types</router-link>
           <router-link to="/booking" class="nav-link">Bookings</router-link>
-          <router-link to="/maintenance" class="nav-link">Maintenance</router-link>
+          <router-link to="/booking/chart" class="nav-link">Statistics</router-link>
         </nav>
       </div>
     </header>

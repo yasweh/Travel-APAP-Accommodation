@@ -36,7 +36,7 @@
           <select id="roomType" v-model="selectedRoomTypeId" @change="onRoomTypeChange" required>
             <option value="">-- Select Room Type --</option>
             <option v-for="rt in roomTypes" :key="rt.roomTypeId" :value="rt.roomTypeId">
-              {{ rt.roomTypeName }} (Floor {{ rt.floor }}, Rp {{ formatCurrency(rt.price) }}/night)
+              {{ rt.name }} (Floor {{ rt.floor }}, Rp {{ formatCurrency(rt.price) }}/night)
             </option>
           </select>
         </div>
@@ -276,10 +276,19 @@ const onRoomTypeChange = async () => {
 
   if (!selectedRoomTypeId.value) return
 
+  // Load rooms based on dates if provided
+  await loadAvailableRooms()
+}
+
+const loadAvailableRooms = async () => {
+  if (!selectedRoomTypeId.value) return
+
   try {
     const response = await bookingService.getAvailableRooms(
       selectedPropertyId.value,
-      selectedRoomTypeId.value
+      selectedRoomTypeId.value,
+      formData.checkInDate || undefined,
+      formData.checkOutDate || undefined
     )
     if (response.success) {
       availableRooms.value = response.data
@@ -296,6 +305,13 @@ const onRoomChange = () => {
     formData.capacity = 1 // Reset to 1 when room changes
   }
 }
+
+// Watch for date changes and reload rooms
+watch([() => formData.checkInDate, () => formData.checkOutDate], () => {
+  if (selectedRoomTypeId.value && formData.checkInDate && formData.checkOutDate) {
+    loadAvailableRooms()
+  }
+})
 
 const submitForm = async () => {
   // Validate check-out > check-in (minimum 1 day)

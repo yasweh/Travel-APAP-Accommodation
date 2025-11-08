@@ -41,7 +41,7 @@
       <tbody>
         <tr v-for="roomType in roomTypes" :key="roomType.roomTypeId">
           <td>{{ roomType.roomTypeId }}</td>
-          <td>{{ roomType.roomTypeName }}</td>
+          <td>{{ roomType.name }}</td>
           <td>{{ roomType.floor }}</td>
           <td>{{ roomType.capacity }} people</td>
           <td>{{ roomType.facility }}</td>
@@ -52,10 +52,10 @@
 
     <!-- Empty State -->
     <div v-else-if="selectedPropertyId" class="empty-state">
-      <p>No room types found for this property. Create the first one!</p>
+      <p>No room types found for this property.</p>
     </div>
     <div v-else class="empty-state">
-      <p>Please select a property to view its room types.</p>
+      <p>All room types are displayed. Select a property to filter.</p>
     </div>
   </div>
 </template>
@@ -70,6 +70,7 @@ const router = useRouter()
 
 const properties = ref<Property[]>([])
 const roomTypes = ref<RoomType[]>([])
+const allRoomTypes = ref<RoomType[]>([]) // Store all room types
 const selectedPropertyId = ref('')
 const loading = ref(false)
 const error = ref('')
@@ -86,9 +87,33 @@ const loadProperties = async () => {
   }
 }
 
+const loadAllRoomTypes = async () => {
+  loading.value = true
+  error.value = ''
+  try {
+    const response = await roomTypeService.getAll()
+    if (response.success) {
+      allRoomTypes.value = response.data
+      roomTypes.value = response.data // Show all by default
+    } else {
+      error.value = response.message
+      allRoomTypes.value = []
+      roomTypes.value = []
+    }
+  } catch (err: any) {
+    error.value = err.response?.data?.message || 'Failed to load room types'
+    allRoomTypes.value = []
+    roomTypes.value = []
+    console.error('Load room types error:', err)
+  } finally {
+    loading.value = false
+  }
+}
+
 const loadRoomTypes = async () => {
   if (!selectedPropertyId.value) {
-    roomTypes.value = []
+    // Show all room types when no property selected
+    roomTypes.value = allRoomTypes.value
     return
   }
 
@@ -112,7 +137,8 @@ const loadRoomTypes = async () => {
 }
 
 const goToCreateRoomType = () => {
-  router.push(`/room-type/create/${selectedPropertyId.value}`)
+  // Redirect to property update form (single source of truth)
+  router.push(`/property/edit/${selectedPropertyId.value}`)
 }
 
 const formatCurrency = (value: number) => {
@@ -121,6 +147,7 @@ const formatCurrency = (value: number) => {
 
 onMounted(() => {
   loadProperties()
+  loadAllRoomTypes() // Load all room types on mount
 })
 </script>
 

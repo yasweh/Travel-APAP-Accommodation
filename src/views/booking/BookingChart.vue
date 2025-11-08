@@ -47,6 +47,12 @@
     <!-- Empty State -->
     <div v-else-if="!loading" class="empty-state">
       <p>No statistics data for {{ getMonthName(selectedMonth) }} {{ selectedYear }}.</p>
+      <p class="hint">
+        Make sure there are completed bookings (status = DONE) with check-in dates in {{ getMonthName(selectedMonth) }} {{ selectedYear }}.
+      </p>
+      <p class="debug-info">
+        Check browser console (F12) for detailed debugging information.
+      </p>
     </div>
 
     <!-- Statistics Table -->
@@ -98,21 +104,30 @@ const loadStatistics = async () => {
   loading.value = true
   error.value = ''
   try {
+    console.log('Loading statistics for:', selectedMonth.value, selectedYear.value)
     const response = await bookingService.getMonthlyStatistics(
       selectedMonth.value,
       selectedYear.value
     )
+    console.log('Response received:', response)
+    
     if (response.success) {
       statistics.value = response.data
-      renderChart()
+      console.log('Statistics data:', statistics.value)
+      
+      if (statistics.value.length === 0) {
+        error.value = `No data found for ${getMonthName(selectedMonth.value)} ${selectedYear.value}. Make sure there are DONE bookings (status=4) with check-in dates in this month.`
+      } else {
+        renderChart()
+      }
     } else {
-      error.value = response.message
+      error.value = response.message || 'Failed to load statistics'
       statistics.value = []
     }
   } catch (err: any) {
-    error.value = err.response?.data?.message || 'Failed to load statistics'
-    statistics.value = []
     console.error('Load statistics error:', err)
+    error.value = err.response?.data?.message || err.message || 'Failed to load statistics'
+    statistics.value = []
   } finally {
     loading.value = false
   }
@@ -319,6 +334,20 @@ h2 {
 
 .empty-state p {
   font-size: 16px;
+  margin: 10px 0;
+}
+
+.empty-state .hint {
+  color: #666;
+  font-size: 14px;
+  margin-top: 15px;
+}
+
+.empty-state .debug-info {
+  color: #999;
+  font-size: 12px;
+  font-style: italic;
+  margin-top: 20px;
 }
 
 .stats-table {
