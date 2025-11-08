@@ -33,7 +33,7 @@ public class AccommodationBooking {
 
     @Column(name = "status", nullable = false)
     @Builder.Default
-    private Integer status = 0; // 0=Waiting, 1=Confirmed, 2=Done, 3=Cancelled/Refund
+    private Integer status = 0; // 0=Waiting, 1=Confirmed, 2=Cancelled, 3=Request Refund, 4=Done
 
     @Column(name = "customer_id", nullable = false)
     private UUID customerId;
@@ -61,6 +61,10 @@ public class AccommodationBooking {
 
     @Column(name = "capacity", nullable = false)
     private Integer capacity;
+
+    @Column(name = "active_status", nullable = false)
+    @Builder.Default
+    private Integer activeStatus = 1; // 0=Deleted, 1=Active
 
     @Column(name = "created_date", nullable = false)
     private LocalDateTime createdDate;
@@ -98,8 +102,9 @@ public class AccommodationBooking {
         switch (this.status) {
             case 0: return "Waiting for Payment";
             case 1: return "Payment Confirmed";
-            case 2: return "Done";
-            case 3: return "Cancelled / Request Refund";
+            case 2: return "Cancelled";
+            case 3: return "Request Refund";
+            case 4: return "Done";
             default: return "Unknown";
         }
     }

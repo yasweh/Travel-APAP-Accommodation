@@ -1,5 +1,6 @@
 package apap.ti._5.accommodation_2306212083_be.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -17,10 +18,17 @@ public class BookingResponseDTO {
     private String bookingId;
     private String roomId;
     private String roomName;
+    private String roomTypeId;
+    private String roomTypeName;
+    private String propertyId;
     private String propertyName;
     
+    @JsonFormat(pattern="yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime checkInDate;
+    
+    @JsonFormat(pattern="yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime checkOutDate;
+    
     private Integer totalDays;
     private Integer totalPrice;
     
@@ -38,6 +46,9 @@ public class BookingResponseDTO {
     private Integer refund;
     private Integer extraPay;
     
+    @JsonFormat(pattern="yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime createdDate;
+    
+    @JsonFormat(pattern="yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime updatedDate;
 }

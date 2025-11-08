@@ -15,8 +15,9 @@ public interface AccommodationBookingRepository extends JpaRepository<Accommodat
     List<AccommodationBooking> findByCustomerId(UUID customerId);
     List<AccommodationBooking> findByStatus(Integer status);
     List<AccommodationBooking> findByRoom_RoomId(String roomId);
+    List<AccommodationBooking> findByActiveStatus(Integer activeStatus);
     
-    @Query("SELECT b FROM AccommodationBooking b WHERE b.status = 1 AND b.checkInDate <= :today")
+    @Query("SELECT b FROM AccommodationBooking b WHERE b.status = 1 AND b.checkInDate <= :today AND b.activeStatus = 1")
     List<AccommodationBooking> findBookingsToCheckIn(LocalDateTime today);
     
     List<AccommodationBooking> findByRoom_RoomType_Property_PropertyId(String propertyId);

@@ -70,6 +70,44 @@ public class MaintenanceController {
     }
 
     /**
+     * GET /api/property/maintenance - Get all maintenance
+     */
+    @GetMapping
+    public ResponseEntity<Map<String, Object>> getAllMaintenance() {
+        try {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", maintenanceService.getAllMaintenance());
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+    }
+
+    /**
+     * GET /api/property/maintenance/room-type/{roomTypeId} - Get maintenance by room type
+     */
+    @GetMapping("/room-type/{roomTypeId}")
+    public ResponseEntity<Map<String, Object>> getMaintenanceByRoomType(@PathVariable String roomTypeId) {
+        try {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", maintenanceService.getMaintenanceByRoomTypeId(roomTypeId));
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+    }
+
+    /**
      * GET /api/property/maintenance/room/{roomId} - Get maintenance by room
      */
     @GetMapping("/room/{roomId}")

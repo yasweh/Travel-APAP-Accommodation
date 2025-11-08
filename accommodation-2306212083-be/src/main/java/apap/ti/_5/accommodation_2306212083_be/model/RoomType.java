@@ -38,6 +38,10 @@ public class RoomType {
     @Column(name = "floor", nullable = false)
     private Integer floor;
 
+    @Column(name = "active_status", nullable = false)
+    @Builder.Default
+    private Integer activeStatus = 1; // 0=Deleted, 1=Active
+
     @Column(name = "created_date", nullable = false)
     private LocalDateTime createdDate;
 

@@ -20,6 +20,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -61,17 +62,21 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     public List<AccommodationBooking> getAllBookings() {
-        return bookingRepository.findAll();
+        return bookingRepository.findByActiveStatus(1); // Only active bookings
     }
 
     @Override
     public List<AccommodationBooking> getBookingsByCustomer(UUID customerId) {
-        return bookingRepository.findByCustomerId(customerId);
+        return bookingRepository.findByCustomerId(customerId).stream()
+            .filter(b -> b.getActiveStatus() == 1)
+            .collect(Collectors.toList());
     }
 
     @Override
     public List<AccommodationBooking> getBookingsByStatus(Integer status) {
-        return bookingRepository.findByStatus(status);
+        return bookingRepository.findByStatus(status).stream()
+            .filter(b -> b.getActiveStatus() == 1)
+            .collect(Collectors.toList());
     }
 
     @Override
@@ -324,9 +329,24 @@ public class BookingServiceImpl implements BookingService {
         AccommodationBooking existing = bookingRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("Booking not found"));
         
-        // Check if has extra_pay or refund
-        if (existing.getExtraPay() > 0 || existing.getRefund() > 0) {
-            throw new RuntimeException("Cannot update booking with extra payment or refund");
+        // Update customer data in Customer table
+        ensureCustomerExists(request);
+        
+        // Status validation based on business rules:
+        // Status 0 (Waiting): can update, diupdate, cancel
+        // Status 1 (Payment Confirmed): can diupdate and cancel (with rules)
+        // Status 2 (Cancelled): cannot update
+        // Status 3 (Request Refund): cannot update
+        // Status 4 (Done): cannot update
+        
+        if (existing.getStatus() == 2) {
+            throw new RuntimeException("Cannot update cancelled booking");
+        }
+        if (existing.getStatus() == 3) {
+            throw new RuntimeException("Cannot update booking with pending refund request");
+        }
+        if (existing.getStatus() == 4) {
+            throw new RuntimeException("Cannot update completed booking");
         }
         
         // Parse dates from String to LocalDateTime
@@ -360,9 +380,35 @@ public class BookingServiceImpl implements BookingService {
         existing.setIsBreakfast(request.getAddOnBreakfast());
         existing.setCapacity(request.getCapacity());
         
-        // Calculate refund if price decreased
-        if (newTotalPrice < oldTotalPrice) {
-            existing.setRefund(oldTotalPrice - newTotalPrice);
+        // Update customer information in booking
+        existing.setCustomerName(request.getCustomerName());
+        existing.setCustomerEmail(request.getCustomerEmail());
+        existing.setCustomerPhone(request.getCustomerPhone());
+        existing.setUpdatedDate(LocalDateTime.now());
+        
+        // Handle price changes based on status
+        if (existing.getStatus() == 0) {
+            // Status 0 (Waiting): Update total price, extra_pay becomes 0 if price increased
+            if (newTotalPrice > oldTotalPrice) {
+                existing.setExtraPay(0); // Will be recalculated on payment
+                existing.setStatus(0); // Keep status as Waiting for Payment
+            }
+            existing.setRefund(0); // No refund for status 0
+        } else if (existing.getStatus() == 1) {
+            // Status 1 (Payment Confirmed): Handle extra_pay or refund
+            if (newTotalPrice > oldTotalPrice) {
+                // Price increased: add to extra_pay, set refund to 0, change to waiting
+                int extraPayment = newTotalPrice - oldTotalPrice;
+                existing.setExtraPay(extraPayment);
+                existing.setRefund(0);
+                existing.setStatus(0); // Change to Waiting for Payment
+            } else if (newTotalPrice < oldTotalPrice) {
+                // Price decreased: add to refund
+                int refundAmount = oldTotalPrice - newTotalPrice;
+                existing.setRefund(refundAmount);
+                existing.setStatus(3); // Change to Request Refund status
+            }
+            // If newTotalPrice == oldTotalPrice, no changes to extra_pay or refund
         }
         
         AccommodationBooking updated = bookingRepository.save(existing);
@@ -379,6 +425,14 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
+    public List<BookingResponseDTO> getAllBookingsAsDTO() {
+        List<AccommodationBooking> bookings = getAllBookings();
+        return bookings.stream()
+            .map(this::mapToResponseDTO)
+            .collect(Collectors.toList());
+    }
+
+    @Override
     public void payBookingById(String id) {
         AccommodationBooking booking = bookingRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("Booking not found"));
@@ -386,21 +440,26 @@ public class BookingServiceImpl implements BookingService {
         Room room = booking.getRoom();
         String propertyId = room.getRoomType().getProperty().getPropertyId();
         
-        if (booking.getExtraPay() > 0) {
-            // Pay extra payment
-            propertyService.updatePropertyIncome(propertyId, booking.getExtraPay());
-            booking.setExtraPay(0);
-        } else if (booking.getStatus() == 0) {
-            // Pay full booking - change status from Waiting (0) to Paid (1)
+        if (booking.getStatus() == 0) {
+            // Pay full booking - change status from Waiting (0) to Confirmed (1)
             booking.setStatus(1);
             
-            // Update property income/revenue
+            // If there's extra pay, add it to total price and income
+            if (booking.getExtraPay() > 0) {
+                booking.setTotalPrice(booking.getTotalPrice() + booking.getExtraPay());
+                booking.setExtraPay(0);
+            }
+            
+            // Update property income/revenue with total price
             propertyService.updatePropertyIncome(propertyId, booking.getTotalPrice());
             
-            // Set room back to available (payment confirmed)
-            room.setAvailabilityStatus(1);
-            room.setUpdatedDate(LocalDateTime.now());
-            roomRepository.save(room);
+        } else if (booking.getExtraPay() > 0) {
+            // Pay extra payment only (booking already confirmed)
+            // Add extra pay to total price
+            booking.setTotalPrice(booking.getTotalPrice() + booking.getExtraPay());
+            // Add extra pay to income
+            propertyService.updatePropertyIncome(propertyId, booking.getExtraPay());
+            booking.setExtraPay(0);
         }
         
         booking.setUpdatedDate(LocalDateTime.now());
@@ -412,22 +471,9 @@ public class BookingServiceImpl implements BookingService {
         AccommodationBooking booking = bookingRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("Booking not found"));
         
-        String propertyId = booking.getRoom().getRoomType().getProperty().getPropertyId();
-        
-        if (booking.getStatus() == 0) {
-            if (booking.getExtraPay() > 0) {
-                propertyService.updatePropertyIncome(propertyId, -booking.getTotalPrice());
-                propertyService.updatePropertyIncome(propertyId, booking.getExtraPay());
-                booking.setExtraPay(0);
-            }
-        } else if (booking.getStatus() == 1) {
-            propertyService.updatePropertyIncome(propertyId, -booking.getTotalPrice());
-        } else if (booking.getStatus() == 3) {
-            propertyService.updatePropertyIncome(propertyId, -booking.getTotalPrice());
-            propertyService.updatePropertyIncome(propertyId, -booking.getRefund());
-        }
-        
+        // Cancel: status becomes 2 (Cancelled) - sesuai class diagram
         booking.setStatus(2);
+        booking.setUpdatedDate(LocalDateTime.now());
         bookingRepository.save(booking);
     }
 
@@ -436,12 +482,32 @@ public class BookingServiceImpl implements BookingService {
         AccommodationBooking booking = bookingRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("Booking not found"));
         
+        // Validate status: only process refund if status is 3 (Request Refund)
+        if (booking.getStatus() != 3) {
+            throw new RuntimeException("Booking is not in Request Refund status");
+        }
+        
+        // Process refund: reduce property income by refund amount
         if (booking.getRefund() > 0) {
             String propertyId = booking.getRoom().getRoomType().getProperty().getPropertyId();
+            
+            // Reduce property income
             propertyService.updatePropertyIncome(propertyId, -booking.getRefund());
-            booking.setStatus(3);
+            
+            // Change status to 4 (Done/Completed) after refund is processed
+            booking.setStatus(4);
+            booking.setUpdatedDate(LocalDateTime.now());
             bookingRepository.save(booking);
+        } else {
+            throw new RuntimeException("No refund amount to process");
         }
+    }
+    
+    @Override
+    public boolean isRoomAvailableForDates(String roomId, LocalDateTime checkIn, LocalDateTime checkOut) {
+        Room room = roomRepository.findById(roomId)
+            .orElseThrow(() -> new RuntimeException("Room not found"));
+        return isRoomAvailableForDateRange(room, checkIn, checkOut);
     }
 
     // ============ HELPER METHODS ============
@@ -471,6 +537,9 @@ public class BookingServiceImpl implements BookingService {
             .bookingId(booking.getBookingId())
             .roomId(room.getRoomId())
             .roomName(room.getName())
+            .roomTypeId(roomType.getRoomTypeId())
+            .roomTypeName(roomType.getName())
+            .propertyId(roomType.getProperty().getPropertyId())
             .propertyName(roomType.getProperty().getPropertyName())
             .checkInDate(booking.getCheckInDate())
             .checkOutDate(booking.getCheckOutDate())
@@ -489,5 +558,47 @@ public class BookingServiceImpl implements BookingService {
             .createdDate(booking.getCreatedDate())
             .updatedDate(booking.getUpdatedDate())
             .build();
+    }
+    
+    /**
+     * Check if room is available for the given date range
+     * Returns true if no booking/maintenance overlaps with the requested dates
+     */
+    private boolean isRoomAvailableForDateRange(Room room, LocalDateTime checkIn, LocalDateTime checkOut) {
+        // Check if room is soft-deleted
+        if (room.getActiveRoom() == 0) {
+            return false;
+        }
+        
+        // Check booking overlaps - only check active bookings (activeStatus = 1) with status 0 or 1
+        // Skip cancelled (2), refund (3), and done (4)
+        List<AccommodationBooking> roomBookings = bookingRepository.findByRoom_RoomId(room.getRoomId());
+        for (AccommodationBooking booking : roomBookings) {
+            // Skip cancelled, refund, done bookings, and inactive bookings
+            if (booking.getActiveStatus() == 0 || booking.getStatus() == 2 || booking.getStatus() == 3 || booking.getStatus() == 4) {
+                continue;
+            }
+            
+            // Check date overlap
+            if (datesOverlap(checkIn, checkOut, booking.getCheckInDate(), booking.getCheckOutDate())) {
+                return false;
+            }
+        }
+        
+        // Check maintenance overlaps
+        if (room.getMaintenanceStart() != null && room.getMaintenanceEnd() != null) {
+            if (datesOverlap(checkIn, checkOut, room.getMaintenanceStart(), room.getMaintenanceEnd())) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Check if two date ranges overlap
+     */
+    private boolean datesOverlap(LocalDateTime start1, LocalDateTime end1, LocalDateTime start2, LocalDateTime end2) {
+        return start1.isBefore(end2) && end1.isAfter(start2);
     }
 }

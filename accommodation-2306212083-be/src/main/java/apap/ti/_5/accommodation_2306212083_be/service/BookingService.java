@@ -3,6 +3,7 @@ package apap.ti._5.accommodation_2306212083_be.service;
 import apap.ti._5.accommodation_2306212083_be.dto.BookingRequestDTO;
 import apap.ti._5.accommodation_2306212083_be.dto.BookingResponseDTO;
 import apap.ti._5.accommodation_2306212083_be.model.AccommodationBooking;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -25,7 +26,11 @@ public interface BookingService {
     BookingResponseDTO createBookingWithSelection(BookingRequestDTO request);
     BookingResponseDTO updateBookingFromDTO(String id, BookingRequestDTO request);
     BookingResponseDTO getBookingDetail(String id);
+    List<BookingResponseDTO> getAllBookingsAsDTO();
     void payBookingById(String id);
     void cancelBookingById(String id);
     void refundBookingById(String id);
+    
+    // Availability check
+    boolean isRoomAvailableForDates(String roomId, LocalDateTime checkIn, LocalDateTime checkOut);
 }

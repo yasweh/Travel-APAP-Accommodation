@@ -16,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,15 +41,21 @@ public class BookingController {
             @RequestParam(required = false) String customerId,
             @RequestParam(required = false) Integer status) {
         
-        List<AccommodationBooking> bookings;
+        List<BookingResponseDTO> bookings;
         
         if (customerId != null) {
             UUID uuid = UUID.fromString(customerId);
-            bookings = bookingService.getBookingsByCustomer(uuid);
+            List<AccommodationBooking> rawBookings = bookingService.getBookingsByCustomer(uuid);
+            bookings = rawBookings.stream()
+                .map(b -> bookingService.getBookingDetail(b.getBookingId()))
+                .collect(Collectors.toList());
         } else if (status != null) {
-            bookings = bookingService.getBookingsByStatus(status);
+            List<AccommodationBooking> rawBookings = bookingService.getBookingsByStatus(status);
+            bookings = rawBookings.stream()
+                .map(b -> bookingService.getBookingDetail(b.getBookingId()))
+                .collect(Collectors.toList());
         } else {
-            bookings = bookingService.getAllBookings();
+            bookings = bookingService.getAllBookingsAsDTO();
         }
         
         Map<String, Object> response = new HashMap<>();
@@ -200,7 +207,7 @@ public class BookingController {
         try {
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("properties", propertyService.getAllActiveProperties());
+            response.put("data", propertyService.getAllActiveProperties());
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -217,7 +224,7 @@ public class BookingController {
     @GetMapping("/roomtypes/{propertyId}")
     public ResponseEntity<Map<String, Object>> getRoomTypesForProperty(@PathVariable String propertyId) {
         try {
-            List<RoomType> roomTypes = roomTypeRepository.findByProperty_PropertyIdOrderByFloorAsc(propertyId);
+            List<RoomType> roomTypes = roomTypeRepository.findByProperty_PropertyIdAndActiveStatusOrderByFloorAsc(propertyId, 1);
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -234,16 +241,34 @@ public class BookingController {
 
     /**
      * GET /api/bookings/rooms/{propertyId}/{roomTypeId} - Get available rooms (cascading dropdown)
+     * Supports optional date range filtering
      */
     @GetMapping("/rooms/{propertyId}/{roomTypeId}")
     public ResponseEntity<Map<String, Object>> getAvailableRooms(
             @PathVariable String propertyId,
-            @PathVariable String roomTypeId) {
+            @PathVariable String roomTypeId,
+            @RequestParam(required = false) String checkInDate,
+            @RequestParam(required = false) String checkOutDate) {
         try {
             List<Room> rooms = roomRepository.findByRoomType_RoomTypeId(roomTypeId)
                 .stream()
-                .filter(room -> room.getAvailabilityStatus() == 1) // Available only (not booked/maintenance)
+                .filter(room -> room.getActiveRoom() == 1) // Not soft-deleted
                 .collect(Collectors.toList());
+            
+            // If dates provided, filter by availability
+            if (checkInDate != null && checkOutDate != null) {
+                LocalDateTime checkIn = LocalDateTime.parse(checkInDate + "T14:00:00");
+                LocalDateTime checkOut = LocalDateTime.parse(checkOutDate + "T12:00:00");
+                
+                rooms = rooms.stream()
+                    .filter(room -> bookingService.isRoomAvailableForDates(room.getRoomId(), checkIn, checkOut))
+                    .collect(Collectors.toList());
+            } else {
+                // No dates, just filter availabilityStatus (old behavior)
+                rooms = rooms.stream()
+                    .filter(room -> room.getAvailabilityStatus() == 1)
+                    .collect(Collectors.toList());
+            }
             
             List<RoomDTO> roomDTOs = rooms.stream()
                 .map(this::mapRoomToDTO)
@@ -300,15 +325,35 @@ public class BookingController {
         try {
             BookingResponseDTO booking = bookingService.getBookingDetail(id);
             
-            // Check if can be updated
-            if (booking.getExtraPay() > 0 || booking.getRefund() > 0) {
-                throw new RuntimeException("Cannot update booking with extra payment or refund");
+            // Check if can be updated based on status
+            // Status 2=Cancelled, 3=Request Refund, 4=Done cannot be updated
+            if (booking.getStatus() == 2) {
+                throw new RuntimeException("Cannot update cancelled booking");
             }
+            if (booking.getStatus() == 3) {
+                throw new RuntimeException("Cannot update booking with pending refund request");
+            }
+            if (booking.getStatus() == 4) {
+                throw new RuntimeException("Cannot update completed booking");
+            }
+            
+            // Convert properties to simple DTOs to avoid Hibernate proxy issues
+            List<Map<String, Object>> propertiesData = propertyService.getAllActiveProperties().stream()
+                .map(p -> {
+                    Map<String, Object> propData = new HashMap<>();
+                    propData.put("propertyId", p.getPropertyId());
+                    propData.put("propertyName", p.getPropertyName());
+                    propData.put("type", p.getType());
+                    propData.put("address", p.getAddress());
+                    propData.put("province", p.getProvince());
+                    return propData;
+                })
+                .collect(Collectors.toList());
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("booking", booking);
-            response.put("properties", propertyService.getAllActiveProperties());
+            response.put("properties", propertiesData);
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {

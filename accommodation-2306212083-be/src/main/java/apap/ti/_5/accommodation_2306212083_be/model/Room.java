@@ -80,4 +80,9 @@ public class Room {
     public boolean isAvailable() {
         return this.availabilityStatus == 1 && this.activeRoom == 1;
     }
+
+    // Alias for frontend compatibility
+    public String getRoomNumber() {
+        return this.name;
+    }
 }

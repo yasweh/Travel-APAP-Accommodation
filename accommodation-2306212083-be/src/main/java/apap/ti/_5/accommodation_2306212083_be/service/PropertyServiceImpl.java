@@ -8,6 +8,7 @@ import apap.ti._5.accommodation_2306212083_be.repository.PropertyRepository;
 import apap.ti._5.accommodation_2306212083_be.repository.RoomTypeRepository;
 import apap.ti._5.accommodation_2306212083_be.repository.RoomRepository;
 import apap.ti._5.accommodation_2306212083_be.repository.AccommodationBookingRepository;
+import apap.ti._5.accommodation_2306212083_be.repository.MaintenanceRepository;
 import apap.ti._5.accommodation_2306212083_be.util.IdGenerator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,7 @@ public class PropertyServiceImpl implements PropertyService {
     private final RoomTypeRepository roomTypeRepository;
     private final RoomRepository roomRepository;
     private final AccommodationBookingRepository bookingRepository;
+    private final MaintenanceRepository maintenanceRepository;
     private final IdGenerator idGenerator;
 
     @Override
@@ -292,7 +294,40 @@ public class PropertyServiceImpl implements PropertyService {
         }
 
         Property property = propertyOpt.get();
-        property.setActiveStatus(0); // Soft delete - set activeStatus to 0
+        
+        // CASCADING SOFT DELETE
+        // 1. Get all room types for this property
+        List<RoomType> roomTypes = roomTypeRepository.findByProperty_PropertyId(propertyId);
+        
+        for (RoomType roomType : roomTypes) {
+            // 2. Get all rooms for this room type
+            List<Room> rooms = roomRepository.findByRoomType_RoomTypeId(roomType.getRoomTypeId());
+            
+            for (Room room : rooms) {
+                // 3. Soft delete all bookings for this room
+                bookingRepository.findByRoom_RoomId(room.getRoomId()).forEach(booking -> {
+                    booking.setActiveStatus(0);
+                    bookingRepository.save(booking);
+                });
+                
+                // 4. Soft delete all maintenance for this room
+                maintenanceRepository.findByRoom_RoomId(room.getRoomId()).forEach(maintenance -> {
+                    maintenance.setActiveStatus(0);
+                    maintenanceRepository.save(maintenance);
+                });
+                
+                // 5. Soft delete the room
+                room.setActiveRoom(0);
+                roomRepository.save(room);
+            }
+            
+            // 6. Soft delete the room type
+            roomType.setActiveStatus(0);
+            roomTypeRepository.save(roomType);
+        }
+        
+        // 7. Finally, soft delete the property
+        property.setActiveStatus(0);
         propertyRepository.save(property);
     }
 
@@ -303,10 +338,11 @@ public class PropertyServiceImpl implements PropertyService {
         
         return properties.stream()
             .map(property -> {
-                // Calculate total income from bookings with status=2 (done) in specified month/year
+                // Calculate total income from bookings with status=4 (done) in specified month/year
+                // Status: 0=Waiting, 1=Confirmed, 2=Cancelled, 3=Request Refund, 4=Done
                 int totalIncome = bookingRepository.findByRoom_RoomType_Property_PropertyId(property.getPropertyId())
                     .stream()
-                    .filter(booking -> booking.getStatus() == 2) // Done status
+                    .filter(booking -> booking.getStatus() == 4) // Done status (NEW)
                     .filter(booking -> {
                         LocalDateTime checkIn = booking.getCheckInDate();
                         return checkIn.getMonthValue() == month && checkIn.getYear() == year;
@@ -316,7 +352,7 @@ public class PropertyServiceImpl implements PropertyService {
                 
                 long bookingCount = bookingRepository.findByRoom_RoomType_Property_PropertyId(property.getPropertyId())
                     .stream()
-                    .filter(booking -> booking.getStatus() == 2)
+                    .filter(booking -> booking.getStatus() == 4) // Done status (NEW)
                     .filter(booking -> {
                         LocalDateTime checkIn = booking.getCheckInDate();
                         return checkIn.getMonthValue() == month && checkIn.getYear() == year;

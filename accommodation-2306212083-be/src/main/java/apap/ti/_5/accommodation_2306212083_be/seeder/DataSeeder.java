@@ -1,21 +1,20 @@
 package apap.ti._5.accommodation_2306212083_be.seeder;
 
-import apap.ti._5.accommodation_2306212083_be.model.Property;
-import apap.ti._5.accommodation_2306212083_be.model.Room;
-import apap.ti._5.accommodation_2306212083_be.model.RoomType;
-import apap.ti._5.accommodation_2306212083_be.repository.PropertyRepository;
-import apap.ti._5.accommodation_2306212083_be.repository.RoomRepository;
-import apap.ti._5.accommodation_2306212083_be.repository.RoomTypeRepository;
+import apap.ti._5.accommodation_2306212083_be.model.*;
+import apap.ti._5.accommodation_2306212083_be.repository.*;
+import apap.ti._5.accommodation_2306212083_be.util.IdGenerator;
+import net.datafaker.Faker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
+import java.util.*;
 
 @Component
 @RequiredArgsConstructor
@@ -25,28 +24,54 @@ public class DataSeeder implements CommandLineRunner {
     private final PropertyRepository propertyRepository;
     private final RoomTypeRepository roomTypeRepository;
     private final RoomRepository roomRepository;
+    private final CustomerRepository customerRepository;
+    private final AccommodationBookingRepository bookingRepository;
+    private final MaintenanceRepository maintenanceRepository;
+    private final IdGenerator idGenerator;
+
+    private final Faker faker = new Faker();
+    private final Random random = new Random();
 
     @Override
+    @Transactional
     public void run(String... args) throws Exception {
-        // Check if data already exists
         if (propertyRepository.count() > 0) {
             log.info("Database already seeded. Skipping seeder.");
             return;
         }
 
-        log.info("Starting database seeding...");
-        
+        log.info("Starting comprehensive database seeding with edge cases...");
+
+        createCustomers();
+        createPropertiesAndRooms();
+        createBookingsWithEdgeCases();
+        createMaintenanceSchedules();
+
+        log.info("Database seeding completed successfully!");
+    }
+
+    private void createCustomers() {
+        String[] names = {"John Doe", "Jane Smith", "Bob Wilson", "Alice Brown", "Charlie Davis"};
+        String[] emails = {"john@example.com", "jane@example.com", "bob@example.com", "alice@example.com", "charlie@example.com"};
+        String[] phones = {"08123456789", "08234567890", "08345678901", "08456789012", "08567890123"};
+
+        for (int i = 0; i < names.length; i++) {
+            Customer customer = Customer.builder()
+                .customerId(UUID.randomUUID())
+                .name(names[i])
+                .email(emails[i])
+                .phone(phones[i])
+                .createdDate(LocalDateTime.now())
+                .build();
+            customerRepository.save(customer);
+        }
+        log.info("Created {} customers", names.length);
+    }
+
+    private void createPropertiesAndRooms() {
         String[] propertyNames = {
-            "Grand Hotel Jakarta",
-            "Bali Beach Resort",
-            "Surabaya Plaza Hotel",
-            "Villa Bandung Hills",
-            "Apartemen Jakarta Pusat",
-            "Hotel Yogyakarta Heritage",
-            "Resort Lombok Paradise",
-            "Villa Puncak Mountain",
-            "Hotel Semarang Business",
-            "Apartemen Surabaya View"
+            "King The Land", "Bali Beach Resort", "Surabaya Plaza Hotel",
+            "Villa Masai", "Apartemen Taman Jasmine"
         };
 
         String[] addresses = {
@@ -54,26 +79,20 @@ public class DataSeeder implements CommandLineRunner {
             "Jl. Pantai Kuta No. 100, Bali",
             "Jl. Basuki Rahmat No. 50, Surabaya",
             "Jl. Dago Pakar No. 25, Bandung",
-            "Jl. Sudirman Kav. 52-53, Jakarta Selatan",
-            "Jl. Malioboro No. 15, Yogyakarta",
-            "Jl. Senggigi Beach, Lombok",
-            "Jl. Raya Puncak KM 77, Bogor",
-            "Jl. Pemuda No. 118, Semarang",
-            "Jl. HR Muhammad No. 10, Surabaya"
+            "Jl. Sudirman Kav. 52-53, Jakarta Selatan"
         };
 
-        Integer[] types = {0, 0, 0, 1, 2, 0, 0, 1, 0, 2}; // 0=Hotel, 1=Villa, 2=Apartemen
-        Integer[] provinces = {0, 4, 3, 1, 0, 2, 4, 1, 2, 3}; // Province codes
+        Integer[] types = {0, 0, 0, 1, 2}; // 0=Hotel, 1=Villa, 2=Apartemen
+        Integer[] provinces = {0, 4, 3, 1, 0};
 
-        for (int i = 0; i < 10; i++) {
-            // Create Property
+        for (int i = 0; i < 5; i++) {
             Property property = Property.builder()
                 .propertyId("PROP-" + String.format("%04d", i + 1))
                 .propertyName(propertyNames[i])
                 .type(types[i])
                 .address(addresses[i])
                 .province(provinces[i])
-                .description("Premium accommodation with excellent facilities and services")
+                .description("Premium accommodation with excellent facilities")
                 .totalRoom(5)
                 .activeStatus(1)
                 .activeRoom(5)
@@ -85,76 +104,295 @@ public class DataSeeder implements CommandLineRunner {
                 .listRoomType(new ArrayList<>())
                 .build();
 
-            // Save property first
             property = propertyRepository.save(property);
             log.info("Created property: {}", property.getPropertyName());
 
-            // Create 2 Room Types for this property
-            String[] roomTypeNames = {"Deluxe Room", "Standard Room"};
-            int[] roomTypePrices = {1000000 + (i * 100000), 500000 + (i * 50000)};
-            int[] roomTypeCapacities = {2, 2};
-            String[] roomTypeFacilities = {
-                "AC, TV, WiFi, Mini Bar, Hot Water, Bathtub",
-                "AC, TV, WiFi, Hot Water"
-            };
-            int[] roomTypeFloors = {2, 2}; // Both on floor 2
-            int[] roomsPerType = {3, 2}; // 3 rooms for Deluxe, 2 for Standard
-            
-            // Track room numbering per floor
-            Map<Integer, Integer> floorRoomCounter = new HashMap<>();
-            
+            // Create 2 Room Types per property
+            String[] roomTypeNames = {"Suite", "Deluxe"};
+            int[] prices = {1000000 + (i * 100000), 500000 + (i * 50000)};
+            int[] capacities = {2, 2};
+            String[] facilities = {"AC, TV, WiFi, Mini Bar, Bathtub", "AC, TV, WiFi"};
+            int[] floors = {2, 1};
+            int[] roomsPerType = {2, 3};
+
+            Map<Integer, Integer> floorCounter = new HashMap<>();
+
             for (int rt = 0; rt < 2; rt++) {
                 RoomType roomType = RoomType.builder()
                     .roomTypeId(property.getPropertyId() + "-RT-" + String.format("%03d", rt + 1))
                     .name(roomTypeNames[rt])
-                    .price(roomTypePrices[rt])
-                    .description("Comfortable " + roomTypeNames[rt].toLowerCase() + " with great amenities")
-                    .capacity(roomTypeCapacities[rt])
-                    .facility(roomTypeFacilities[rt])
-                    .floor(roomTypeFloors[rt])
+                    .price(prices[rt])
+                    .description("Comfortable " + roomTypeNames[rt].toLowerCase())
+                    .capacity(capacities[rt])
+                    .facility(facilities[rt])
+                    .floor(floors[rt])
                     .property(property)
+                    .activeStatus(1)
                     .createdDate(LocalDateTime.now())
                     .updatedDate(LocalDateTime.now())
                     .listRoom(new ArrayList<>())
                     .build();
 
                 roomType = roomTypeRepository.save(roomType);
-                log.info("Created room type: {} for {}", roomType.getName(), property.getPropertyName());
 
-                // Initialize counter for this floor if not exists
-                Integer floor = roomTypeFloors[rt];
-                if (!floorRoomCounter.containsKey(floor)) {
-                    floorRoomCounter.put(floor, 1);
+                Integer floor = floors[rt];
+                if (!floorCounter.containsKey(floor)) {
+                    floorCounter.put(floor, 1);
                 }
 
-                // Create rooms for this room type with floor-based numbering
-                int numRooms = roomsPerType[rt];
-                for (int j = 0; j < numRooms; j++) {
-                    // Get current room number for this floor
-                    int roomNumber = floorRoomCounter.get(floor);
-                    
-                    // Generate room name: FloorXX (e.g., 201, 202, 203, 204, 205)
+                for (int j = 0; j < roomsPerType[rt]; j++) {
+                    int roomNumber = floorCounter.get(floor);
                     String roomName = String.format("%d%02d", floor, roomNumber);
-                    
+
                     Room room = Room.builder()
                         .roomId(property.getPropertyId() + "-ROOM-" + roomName)
                         .name(roomName)
-                        .availabilityStatus(1) // Available
-                        .activeRoom(1) // Active
+                        .availabilityStatus(1)
+                        .activeRoom(1)
                         .roomType(roomType)
                         .createdDate(LocalDateTime.now())
                         .updatedDate(LocalDateTime.now())
                         .build();
 
                     roomRepository.save(room);
-                    
-                    // Increment counter for this floor
-                    floorRoomCounter.put(floor, roomNumber + 1);
+                    floorCounter.put(floor, roomNumber + 1);
                 }
             }
-            log.info("Created 5 rooms (2 room types) for property: {}", property.getPropertyName());
         }
+        log.info("Created 5 properties with 25 total rooms");
+    }
 
-        log.info("Database seeding completed! Created 10 properties with 50 total rooms (5 rooms per property, 2 room types each).");
+    private void createBookingsWithEdgeCases() {
+        List<Customer> customers = customerRepository.findAll();
+        List<Room> allRooms = roomRepository.findAll();
+
+        LocalDateTime now = LocalDateTime.now();
+        int bookingIndex = 0;
+
+        // Scenario 1: DONE bookings (status=4) - for statistics in current month
+        for (int i = 0; i < 5; i++) {
+            Room room = allRooms.get(i);
+            Customer customer = customers.get(i % customers.size());
+
+            LocalDateTime checkIn = now.minusDays(10).withHour(14).withMinute(0);
+            LocalDateTime checkOut = now.minusDays(7).withHour(12).withMinute(0);
+            long days = ChronoUnit.DAYS.between(checkIn, checkOut);
+            int totalPrice = room.getRoomType().getPrice() * (int)days;
+
+            AccommodationBooking booking = AccommodationBooking.builder()
+                .bookingId(idGenerator.generateBookingId(room.getRoomId()))
+                .room(room)
+                .customerId(customer.getCustomerId())
+                .customerName(customer.getName())
+                .customerEmail(customer.getEmail())
+                .customerPhone(customer.getPhone())
+                .checkInDate(checkIn)
+                .checkOutDate(checkOut)
+                .totalDays((int)days)
+                .totalPrice(totalPrice)
+                .capacity(room.getRoomType().getCapacity())
+                .isBreakfast(i % 2 == 0)
+                .status(4) // DONE
+                .activeStatus(1)
+                .extraPay(0)
+                .refund(0)
+                .createdDate(checkIn.minusDays(5))
+                .updatedDate(checkOut)
+                .build();
+
+            bookingRepository.save(booking);
+            bookingIndex++;
+        }
+        log.info("Created 5 DONE bookings for statistics");
+
+        // Scenario 2: CONFIRMED bookings (status=1) - currently booked
+        for (int i = 5; i < 8; i++) {
+            Room room = allRooms.get(i);
+            Customer customer = customers.get(i % customers.size());
+
+            LocalDateTime checkIn = now.plusDays(2).withHour(14).withMinute(0);
+            LocalDateTime checkOut = now.plusDays(5).withHour(12).withMinute(0);
+            long days = ChronoUnit.DAYS.between(checkIn, checkOut);
+            int totalPrice = room.getRoomType().getPrice() * (int)days;
+
+            AccommodationBooking booking = AccommodationBooking.builder()
+                .bookingId(idGenerator.generateBookingId(room.getRoomId()))
+                .room(room)
+                .customerId(customer.getCustomerId())
+                .customerName(customer.getName())
+                .customerEmail(customer.getEmail())
+                .customerPhone(customer.getPhone())
+                .checkInDate(checkIn)
+                .checkOutDate(checkOut)
+                .totalDays((int)days)
+                .totalPrice(totalPrice)
+                .capacity(room.getRoomType().getCapacity())
+                .isBreakfast(true)
+                .status(1) // CONFIRMED
+                .activeStatus(1)
+                .extraPay(0)
+                .refund(0)
+                .createdDate(now.minusDays(2))
+                .updatedDate(now.minusDays(1))
+                .build();
+
+            bookingRepository.save(booking);
+            room.setAvailabilityStatus(0); // Booked
+            roomRepository.save(room);
+            bookingIndex++;
+        }
+        log.info("Created 3 CONFIRMED bookings (rooms currently booked)");
+
+        // Scenario 3: WAITING bookings (status=0)
+        for (int i = 8; i < 10; i++) {
+            Room room = allRooms.get(i);
+            Customer customer = customers.get(i % customers.size());
+
+            LocalDateTime checkIn = now.plusDays(10).withHour(14).withMinute(0);
+            LocalDateTime checkOut = now.plusDays(13).withHour(12).withMinute(0);
+            long days = ChronoUnit.DAYS.between(checkIn, checkOut);
+            int totalPrice = room.getRoomType().getPrice() * (int)days;
+
+            AccommodationBooking booking = AccommodationBooking.builder()
+                .bookingId(idGenerator.generateBookingId(room.getRoomId()))
+                .room(room)
+                .customerId(customer.getCustomerId())
+                .customerName(customer.getName())
+                .customerEmail(customer.getEmail())
+                .customerPhone(customer.getPhone())
+                .checkInDate(checkIn)
+                .checkOutDate(checkOut)
+                .totalDays((int)days)
+                .totalPrice(totalPrice)
+                .capacity(room.getRoomType().getCapacity())
+                .isBreakfast(false)
+                .status(0) // WAITING
+                .activeStatus(1)
+                .extraPay(0)
+                .refund(0)
+                .createdDate(now.minusHours(2))
+                .updatedDate(now.minusHours(2))
+                .build();
+
+            bookingRepository.save(booking);
+            bookingIndex++;
+        }
+        log.info("Created 2 WAITING bookings");
+
+        // Scenario 4: CANCELLED bookings (status=2)
+        for (int i = 10; i < 12; i++) {
+            Room room = allRooms.get(i);
+            Customer customer = customers.get(i % customers.size());
+
+            LocalDateTime checkIn = now.plusDays(15).withHour(14).withMinute(0);
+            LocalDateTime checkOut = now.plusDays(17).withHour(12).withMinute(0);
+            long days = ChronoUnit.DAYS.between(checkIn, checkOut);
+            int totalPrice = room.getRoomType().getPrice() * (int)days;
+
+            AccommodationBooking booking = AccommodationBooking.builder()
+                .bookingId(idGenerator.generateBookingId(room.getRoomId()))
+                .room(room)
+                .customerId(customer.getCustomerId())
+                .customerName(customer.getName())
+                .customerEmail(customer.getEmail())
+                .customerPhone(customer.getPhone())
+                .checkInDate(checkIn)
+                .checkOutDate(checkOut)
+                .totalDays((int)days)
+                .totalPrice(totalPrice)
+                .capacity(room.getRoomType().getCapacity())
+                .isBreakfast(false)
+                .status(2) // CANCELLED
+                .activeStatus(1)
+                .extraPay(0)
+                .refund(0)
+                .createdDate(now.minusDays(3))
+                .updatedDate(now.minusDays(1))
+                .build();
+
+            bookingRepository.save(booking);
+            bookingIndex++;
+        }
+        log.info("Created 2 CANCELLED bookings");
+
+        // Scenario 5: REQUEST REFUND bookings (status=3)
+        Room room = allRooms.get(12);
+        Customer customer = customers.get(0);
+
+        LocalDateTime checkIn = now.minusDays(3).withHour(14).withMinute(0);
+        LocalDateTime checkOut = now.minusDays(1).withHour(12).withMinute(0);
+        long days = ChronoUnit.DAYS.between(checkIn, checkOut);
+        int totalPrice = room.getRoomType().getPrice() * (int)days;
+        int refund = totalPrice / 2; // 50% refund
+
+        AccommodationBooking booking = AccommodationBooking.builder()
+            .bookingId(idGenerator.generateBookingId(room.getRoomId()))
+            .room(room)
+            .customerId(customer.getCustomerId())
+            .customerName(customer.getName())
+            .customerEmail(customer.getEmail())
+            .customerPhone(customer.getPhone())
+            .checkInDate(checkIn)
+            .checkOutDate(checkOut)
+            .totalDays((int)days)
+            .totalPrice(totalPrice)
+            .capacity(room.getRoomType().getCapacity())
+            .isBreakfast(true)
+            .status(3) // REQUEST REFUND
+            .activeStatus(1)
+            .extraPay(0)
+            .refund(refund)
+            .createdDate(checkIn.minusDays(5))
+            .updatedDate(now.minusHours(3))
+            .build();
+
+        bookingRepository.save(booking);
+        log.info("Created 1 REQUEST REFUND booking");
+
+        log.info("Total bookings created: {} (5 DONE, 3 CONFIRMED, 2 WAITING, 2 CANCELLED, 1 REFUND)", bookingIndex + 1);
+    }
+
+    private void createMaintenanceSchedules() {
+        List<Room> allRooms = roomRepository.findAll();
+        LocalDate today = LocalDate.now();
+
+        // Maintenance ongoing - affects room availability
+        for (int i = 13; i < 15; i++) {
+            Room room = allRooms.get(i);
+
+            Maintenance maintenance = Maintenance.builder()
+                .room(room)
+                .startDate(today.minusDays(2))
+                .startTime(LocalTime.of(8, 0))
+                .endDate(today.plusDays(2))
+                .endTime(LocalTime.of(17, 0))
+                .activeStatus(1)
+                .createdDate(LocalDateTime.now())
+                .build();
+
+            maintenanceRepository.save(maintenance);
+
+            // Set room to maintenance mode
+            room.setActiveRoom(0); // Inactive due to maintenance
+            room.setMaintenanceStart(maintenance.getStartDate().atTime(maintenance.getStartTime()));
+            room.setMaintenanceEnd(maintenance.getEndDate().atTime(maintenance.getEndTime()));
+            roomRepository.save(room);
+        }
+        log.info("Created 2 ongoing maintenance schedules (rooms in maintenance)");
+
+        // Future maintenance
+        Room futureRoom = allRooms.get(15);
+        Maintenance futureMaintenance = Maintenance.builder()
+            .room(futureRoom)
+            .startDate(today.plusDays(7))
+            .startTime(LocalTime.of(8, 0))
+            .endDate(today.plusDays(9))
+            .endTime(LocalTime.of(17, 0))
+            .activeStatus(1)
+            .createdDate(LocalDateTime.now())
+            .build();
+
+        maintenanceRepository.save(futureMaintenance);
+        log.info("Created 1 future maintenance schedule");
     }
 }

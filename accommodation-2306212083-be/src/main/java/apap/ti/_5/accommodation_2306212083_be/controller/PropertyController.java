@@ -4,6 +4,7 @@ import apap.ti._5.accommodation_2306212083_be.model.Property;
 import apap.ti._5.accommodation_2306212083_be.model.RoomType;
 import apap.ti._5.accommodation_2306212083_be.service.PropertyService;
 import apap.ti._5.accommodation_2306212083_be.service.RoomService;
+import apap.ti._5.accommodation_2306212083_be.repository.RoomTypeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +19,7 @@ public class PropertyController {
 
     private final PropertyService propertyService;
     private final RoomService roomService;
+    private final RoomTypeRepository roomTypeRepository;
 
     /**
      * GET /api/property - List all properties
@@ -68,6 +70,27 @@ public class PropertyController {
         response.put("data", propertiesWithRoomCount);
         
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * GET /api/property/{id}/room-types - Get room types by property
+     */
+    @GetMapping("/{id}/room-types")
+    public ResponseEntity<Map<String, Object>> getRoomTypesByProperty(@PathVariable String id) {
+        try {
+            List<RoomType> roomTypes = roomTypeRepository.findByProperty_PropertyIdAndActiveStatus(id, 1);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", roomTypes);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
     }
 
     /**
