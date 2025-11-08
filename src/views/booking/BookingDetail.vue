@@ -363,8 +363,9 @@ onMounted(() => {
 <style scoped>
 .booking-detail {
   padding: 20px;
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
 }
 
 .loading {

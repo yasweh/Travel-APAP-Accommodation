@@ -216,7 +216,8 @@ onMounted(() => {
 <style scoped>
 .maintenance-form {
   padding: 20px;
-  max-width: 700px;
+  width: 100%;
+  max-width: 900px;
   margin: 0 auto;
 }
 

@@ -314,8 +314,9 @@ onMounted(() => {
 
 <style scoped>
 .room-type-form {
-  max-width: 1000px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
   padding: 20px;
 }
 
