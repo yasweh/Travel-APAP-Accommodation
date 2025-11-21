@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: accommodation-fe
+  labels:
+    app: accommodation-fe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: accommodation-fe
+  template:
+    metadata:
+      labels:
+        app: accommodation-fe
+    spec:
+      containers:
+        - name: accommodation-fe
+          image: muhammadyahya32/accommodation-fe:REPLACE_ME_TAG
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
