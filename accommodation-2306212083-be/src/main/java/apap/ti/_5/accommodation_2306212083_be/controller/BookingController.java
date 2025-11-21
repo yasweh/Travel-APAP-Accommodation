@@ -94,9 +94,6 @@ public class BookingController {
         }
     }
 
-    // REMOVED: Old createBooking method - now using BookingRequestDTO version below
-    // REMOVED: Old updateBooking method - now using BookingRequestDTO version below
-
     /**
      * PUT /api/bookings/pay/{id} - Confirm payment (status 0 -> 1)
      */
