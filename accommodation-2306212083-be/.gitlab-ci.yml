@@ -21,6 +21,8 @@ build:
       - k8s/deployment.yaml
       - k8s/service.yaml
     expire_in: 1 hour
+  only:
+    - feat/deploy
 
 docker-push:
   stage: docker-push
