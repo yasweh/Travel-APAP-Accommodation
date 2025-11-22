@@ -91,3 +91,13 @@ jacocoTestCoverageVerification {
 }
 
 check.dependsOn jacocoTestCoverageVerification
+
+// Ensure executable fat JAR is generated
+tasks.named('jar') {
+	enabled = false
+}
+
+tasks.named('bootJar') {
+	enabled = true
+	archiveFileName = "${project.name}-${project.version}.jar"
+}

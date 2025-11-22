@@ -12,8 +12,8 @@ build:
   image: eclipse-temurin:21-jdk
   script:
     - chmod +x ./gradlew
-    - ./gradlew clean build -x test
-    - cp $(find build/libs -name "*.jar" | head -n 1) app.jar
+    - ./gradlew clean bootJar -x test
+    - cp build/libs/*.jar app.jar
   artifacts:
     paths:
       - app.jar
