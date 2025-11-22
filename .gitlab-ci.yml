@@ -19,7 +19,7 @@ docker-build-push:
     - rsync -avz --delete --exclude=node_modules --exclude=.git . $EC2_USER@$EC2_HOST:~/app/
     - ssh $EC2_USER@$EC2_HOST "
         cd ~/app &&
-        sudo docker build --build-arg VITE_API_URL=$VITE_API_URL --build-arg VITE_BE2_API_URL=$VITE_BE2_API_URL -t $DOCKER_IMAGE_NAME:$IMAGE_TAG . &&
+        sudo docker build --build-arg VITE_API_BASE_URL=$VITE_API_BASE_URL -t $DOCKER_IMAGE_NAME:$IMAGE_TAG . &&
         echo '$DOCKER_PASSWORD' | sudo docker login -u '$DOCKER_USERNAME' --password-stdin &&
         sudo docker push $DOCKER_IMAGE_NAME:$IMAGE_TAG
       "

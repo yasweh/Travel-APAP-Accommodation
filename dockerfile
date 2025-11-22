@@ -5,15 +5,14 @@ WORKDIR /app
 COPY package*.json ./
 
 # build args
-ARG VITE_API_URL
-ARG VITE_BE2_API_URL
+ARG VITE_API_BASE_URL
 
 RUN npm ci
 
 COPY . .
 
 # generate .env.production + build
-RUN echo "VITE_API_URL=${VITE_API_URL}\nVITE_BE2_API_URL=${VITE_BE2_API_URL}" > .env.production \
+RUN echo "VITE_API_BASE_URL=${VITE_API_BASE_URL}" > .env.production \
     && npm run build
 
 # --- Production stage ---
