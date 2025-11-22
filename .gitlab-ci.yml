@@ -28,27 +28,26 @@ docker-build-push:
 deploy:
   stage: deploy
   image: alpine:latest
+  dependencies:
+    - build  
+    - docker-push
   before_script:
     - apk add --no-cache openssh bash
     - mkdir -p ~/.ssh
     - echo "$EC2_SSH_KEY" > ~/.ssh/id_rsa
     - chmod 600 ~/.ssh/id_rsa
-    - ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+    - ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
   script:
-    - sed "s|REPLACE_ME_TAG|$IMAGE_TAG|g" k8s/deployment.yaml > deployment.yaml
-    - ssh $EC2_USER@$EC2_HOST "mkdir -p ~/app/k8s"
+    - sed "s|REPLACE_ME_TAG|$IMAGE_TAG|g" k8s/deployment.yaml > k8s/deployment.tmp.yaml
+    - mv k8s/deployment.tmp.yaml k8s/deployment.yaml
 
-    - scp deployment.yaml $EC2_USER@$EC2_HOST:~/app/k8s/deployment.yaml
-    - scp k8s/service.yaml $EC2_USER@$EC2_HOST:~/app/k8s/service.yaml
-    - scp k8s/ingress.yaml $EC2_USER@$EC2_HOST:~/app/k8s/ingress.yaml
+    - ssh $EC2_USER@$EC2_HOST "mkdir -p ~/app/accommodation-fe/k8s"
+    - scp k8s/deployment.yaml k8s/service.yaml k8s/ingress.yaml $EC2_USER@$EC2_HOST:~/app/accommodation-fe/k8s/
 
-    - ssh $EC2_USER@$EC2_HOST "
-        sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply -f ~/app/k8s/deployment.yaml &&
-        sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply -f ~/app/k8s/service.yaml &&
-        sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply -f ~/app/k8s/ingress.yaml &&
-        sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl rollout restart deployment/sidatingapp-fe &&
-        sudo docker image prune -a -f &&
-        sudo docker container prune -f
+    - |
+      ssh $EC2_USER@$EC2_HOST "
+        sudo k3s kubectl apply -f ~/app/accommodation-fe/k8s/ &&
+        sudo k3s kubectl rollout status deployment/accommodation-fe
       "
   only:
     - feat/deploy
