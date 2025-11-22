@@ -25,12 +25,10 @@ docker-build-push:
       "
   only:
     - feat/deploy
+
 deploy:
   stage: deploy
   image: alpine:latest
-  dependencies:
-    - build  
-    - docker-push
   before_script:
     - apk add --no-cache openssh bash
     - mkdir -p ~/.ssh
