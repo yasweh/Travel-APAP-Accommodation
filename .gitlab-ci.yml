@@ -53,8 +53,8 @@ deploy:
     - ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
   script:
     - |
-      printf "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: accommodation-be-config\n  namespace: default\ndata:\n  DATABASE_URL_PROD: \"%s\"\n  DATABASE_USERNAME: \"%s\"\n" \
-      "$DATABASE_URL_PROD" "$DATABASE_USERNAME" > configmap.yaml
+      printf "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: accommodation-be-config\n  namespace: default\ndata:\n  DATABASE_URL_PROD: \"%s\"\n  DATABASE_USERNAME: \"%s\"\n  CORS_ALLOWED_ORIGINS: \"%s\"\n" \
+      "$DATABASE_URL_PROD" "$DATABASE_USERNAME" "$CORS_ALLOWED_ORIGINS" > configmap.yaml
     - |
       printf "apiVersion: v1\nkind: Secret\nmetadata:\n  name: accommodation-be-secret\n  namespace: default\ntype: Opaque\nstringData:\n  DATABASE_PASSWORD: \"%s\"\n  JWT_SECRET_KEY: \"%s\"\n" \
       "$DATABASE_PASSWORD" "$JWT_SECRET_KEY" > secret.yaml
