@@ -4,19 +4,19 @@ WORKDIR /app
 
 COPY package*.json ./
 
+# build args
 ARG VITE_API_URL
 ARG VITE_BE2_API_URL
-
-ENV VITE_API_URL=$VITE_API_URL
 
 RUN npm ci
 
 COPY . .
 
-RUN echo "VITE_API_URL=$VITE_API_URL" > .env.production && \
+# generate .env.production + build
+RUN echo "VITE_API_URL=${VITE_API_URL}\nVITE_BE2_API_URL=${VITE_BE2_API_URL}" > .env.production \
+    && npm run build
 
-RUN npm run build
-
+# --- Production stage ---
 FROM nginx:alpine
 
 RUN rm -rf /usr/share/nginx/html/*
