@@ -1,36 +1,30 @@
 stages:
-  - build
-  - docker-push
+  - docker-build-push
   - deploy
 
 variables:
   DOCKER_IMAGE_NAME: muhammadyahya32/accommodation-fe
   IMAGE_TAG: $CI_COMMIT_SHORT_SHA
 
-build:
-  stage: build
-  image: node:20
-  script:
-    - npm ci
-    - npm run build
-  artifacts:
-    paths:
-      - dist/
-    expire_in: 1 hour
-
-docker-push:
-  stage: docker-push
+docker-build-push:
+  stage: docker-build-push
   image: docker:latest
-  services:
-    - docker:dind
   before_script:
-    - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+    - apk add --no-cache openssh bash rsync
+    - mkdir -p ~/.ssh
+    - echo "$EC2_SSH_KEY" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
   script:
-    - docker build --build-arg VITE_API_URL=$VITE_API_URL --build-arg VITE_BE2_API_URL=$VITE_BE2_API_URL -t $DOCKER_IMAGE_NAME:$IMAGE_TAG .
-    - docker push $DOCKER_IMAGE_NAME:$IMAGE_TAG
+    - rsync -avz --delete --exclude=node_modules --exclude=.git . $EC2_USER@$EC2_HOST:~/app/
+    - ssh $EC2_USER@$EC2_HOST "
+        cd ~/app &&
+        sudo docker build --build-arg VITE_API_URL=$VITE_API_URL --build-arg VITE_BE2_API_URL=$VITE_BE2_API_URL -t $DOCKER_IMAGE_NAME:$IMAGE_TAG . &&
+        echo '$DOCKER_PASSWORD' | sudo docker login -u '$DOCKER_USERNAME' --password-stdin &&
+        sudo docker push $DOCKER_IMAGE_NAME:$IMAGE_TAG
+      "
   only:
     - feat/deploy
-
 deploy:
   stage: deploy
   image: alpine:latest
@@ -39,17 +33,22 @@ deploy:
     - mkdir -p ~/.ssh
     - echo "$EC2_SSH_KEY" > ~/.ssh/id_rsa
     - chmod 600 ~/.ssh/id_rsa
-    - ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+    - ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
   script:
     - sed "s|REPLACE_ME_TAG|$IMAGE_TAG|g" k8s/deployment.yaml > deployment.yaml
-
     - ssh $EC2_USER@$EC2_HOST "mkdir -p ~/app/k8s"
+
     - scp deployment.yaml $EC2_USER@$EC2_HOST:~/app/k8s/deployment.yaml
     - scp k8s/service.yaml $EC2_USER@$EC2_HOST:~/app/k8s/service.yaml
     - scp k8s/ingress.yaml $EC2_USER@$EC2_HOST:~/app/k8s/ingress.yaml
 
-    - ssh $EC2_USER@$EC2_HOST "sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply -f ~/app/k8s/deployment.yaml"
-    - ssh $EC2_USER@$EC2_HOST "sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply -f ~/app/k8s/service.yaml"
-    - ssh $EC2_USER@$EC2_HOST "sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply -f ~/app/k8s/ingress.yaml"
+    - ssh $EC2_USER@$EC2_HOST "
+        sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply -f ~/app/k8s/deployment.yaml &&
+        sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply -f ~/app/k8s/service.yaml &&
+        sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl apply -f ~/app/k8s/ingress.yaml &&
+        sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl rollout restart deployment/sidatingapp-fe &&
+        sudo docker image prune -a -f &&
+        sudo docker container prune -f
+      "
   only:
     - feat/deploy
