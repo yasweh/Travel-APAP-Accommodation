@@ -4,16 +4,25 @@ import apap.ti._5.accommodation_2306212083_be.dto.BookingRequestDTO;
 import apap.ti._5.accommodation_2306212083_be.dto.BookingResponseDTO;
 import apap.ti._5.accommodation_2306212083_be.dto.PropertyStatisticsDTO;
 import apap.ti._5.accommodation_2306212083_be.dto.RoomDTO;
+import apap.ti._5.accommodation_2306212083_be.dto.UserPrincipal;
 import apap.ti._5.accommodation_2306212083_be.model.AccommodationBooking;
+import apap.ti._5.accommodation_2306212083_be.model.Property;
 import apap.ti._5.accommodation_2306212083_be.model.Room;
 import apap.ti._5.accommodation_2306212083_be.model.RoomType;
+import apap.ti._5.accommodation_2306212083_be.security.annotations.IsCustomer;
+import apap.ti._5.accommodation_2306212083_be.security.annotations.IsOwner;
 import apap.ti._5.accommodation_2306212083_be.service.BookingService;
 import apap.ti._5.accommodation_2306212083_be.service.PropertyService;
+import apap.ti._5.accommodation_2306212083_be.service.OwnerValidationService;
 import apap.ti._5.accommodation_2306212083_be.repository.RoomRepository;
 import apap.ti._5.accommodation_2306212083_be.repository.RoomTypeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -32,30 +41,60 @@ public class BookingController {
     private final PropertyService propertyService;
     private final RoomRepository roomRepository;
     private final RoomTypeRepository roomTypeRepository;
+    private final OwnerValidationService ownerValidationService;
 
     /**
      * GET /api/bookings - List all bookings with filters
+     * CUSTOMER: can view own bookings
+     * ACCOMMODATION_OWNER: can view bookings for their properties
+     * SUPERADMIN: can view all bookings
      */
     @GetMapping
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ACCOMMODATION_OWNER', 'SUPERADMIN')")
     public ResponseEntity<Map<String, Object>> listBookings(
             @RequestParam(required = false) String customerId,
             @RequestParam(required = false) Integer status) {
         
+        UserPrincipal user = ownerValidationService.getCurrentUser();
         List<BookingResponseDTO> bookings;
         
-        if (customerId != null) {
-            UUID uuid = UUID.fromString(customerId);
+        if (ownerValidationService.isCustomer()) {
+            // Customer can only see their own bookings
+            UUID uuid = UUID.fromString(user.getUserId());
             List<AccommodationBooking> rawBookings = bookingService.getBookingsByCustomer(uuid);
             bookings = rawBookings.stream()
                 .map(b -> bookingService.getBookingDetail(b.getBookingId()))
                 .collect(Collectors.toList());
-        } else if (status != null) {
-            List<AccommodationBooking> rawBookings = bookingService.getBookingsByStatus(status);
-            bookings = rawBookings.stream()
-                .map(b -> bookingService.getBookingDetail(b.getBookingId()))
+                
+        } else if (ownerValidationService.isOwner()) {
+            // Owner can only see bookings for their properties
+            bookings = bookingService.getAllBookingsAsDTO().stream()
+                .filter(booking -> {
+                    try {
+                        String propertyOwnerId = getPropertyOwnerIdFromBooking(booking.getBookingId());
+                        return user.getUserId().equals(propertyOwnerId);
+                    } catch (Exception e) {
+                        return false;
+                    }
+                })
                 .collect(Collectors.toList());
+                
         } else {
-            bookings = bookingService.getAllBookingsAsDTO();
+            // Superadmin sees all bookings
+            if (customerId != null) {
+                UUID uuid = UUID.fromString(customerId);
+                List<AccommodationBooking> rawBookings = bookingService.getBookingsByCustomer(uuid);
+                bookings = rawBookings.stream()
+                    .map(b -> bookingService.getBookingDetail(b.getBookingId()))
+                    .collect(Collectors.toList());
+            } else if (status != null) {
+                List<AccommodationBooking> rawBookings = bookingService.getBookingsByStatus(status);
+                bookings = rawBookings.stream()
+                    .map(b -> bookingService.getBookingDetail(b.getBookingId()))
+                    .collect(Collectors.toList());
+            } else {
+                bookings = bookingService.getAllBookingsAsDTO();
+            }
         }
         
         Map<String, Object> response = new HashMap<>();
@@ -67,10 +106,17 @@ public class BookingController {
 
     /**
      * GET /api/bookings/{id} - Booking detail with conditional buttons
+     * CUSTOMER: can view own booking
+     * ACCOMMODATION_OWNER: can view booking for their property
+     * SUPERADMIN: can view any booking
      */
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ACCOMMODATION_OWNER', 'SUPERADMIN')")
     public ResponseEntity<Map<String, Object>> detailBooking(@PathVariable String id) {
         try {
+            // Use OwnerValidationService for access validation
+            ownerValidationService.validateBookingAccess(id);
+            
             BookingResponseDTO booking = bookingService.getBookingDetail(id);
             
             // Determine available actions based on status
@@ -96,10 +142,15 @@ public class BookingController {
 
     /**
      * PUT /api/bookings/pay/{id} - Confirm payment (status 0 -> 1)
+     * Requires: CUSTOMER role (own booking only)
      */
     @PutMapping("/pay/{id}")
+    @IsCustomer
     public ResponseEntity<Map<String, Object>> payBooking(@PathVariable String id) {
         try {
+            // Use OwnerValidationService for ownership validation
+            ownerValidationService.validateBookingOwnership(id);
+            
             bookingService.payBooking(id);
             
             Map<String, Object> response = new HashMap<>();
@@ -116,11 +167,16 @@ public class BookingController {
     }
 
     /**
-     * PUT /api/bookings/cancel/{id} - Cancel booking (status 0 -> 2)
+     * PUT /api/bookings/cancel/{id} - Cancel booking (status 0 -> 1)
+     * Requires: CUSTOMER role (own booking only)
      */
     @PutMapping("/cancel/{id}")
+    @IsCustomer
     public ResponseEntity<Map<String, Object>> cancelBooking(@PathVariable String id) {
         try {
+            // Use OwnerValidationService for ownership validation
+            ownerValidationService.validateBookingOwnership(id);
+            
             bookingService.cancelBooking(id);
             
             Map<String, Object> response = new HashMap<>();
@@ -138,10 +194,15 @@ public class BookingController {
 
     /**
      * PUT /api/bookings/refund/{id} - Request refund (status 1 -> 3)
+     * Requires: CUSTOMER role (own booking only)
      */
     @PutMapping("/refund/{id}")
+    @IsCustomer
     public ResponseEntity<Map<String, Object>> refundBooking(@PathVariable String id) {
         try {
+            // Use OwnerValidationService for ownership validation
+            ownerValidationService.validateBookingOwnership(id);
+            
             bookingService.refundBooking(id);
             
             Map<String, Object> response = new HashMap<>();
@@ -286,8 +347,10 @@ public class BookingController {
 
     /**
      * POST /api/bookings/create - Create new booking (supports both with/without room selection)
+     * Requires: CUSTOMER role
      */
     @PostMapping("/create")
+    @IsCustomer
     public ResponseEntity<Map<String, Object>> createBooking(@RequestBody BookingRequestDTO request) {
         try {
             BookingResponseDTO booking;
@@ -299,6 +362,11 @@ public class BookingController {
                 // Create with selection (should have roomId from dropdown)
                 booking = bookingService.createBookingWithSelection(request);
             }
+            
+            // Auto-set customer ID using OwnerValidationService
+            AccommodationBooking rawBooking = bookingService.getBookingById(booking.getBookingId())
+                .orElseThrow(() -> new RuntimeException("Booking not found after creation"));
+            ownerValidationService.setCustomerForNewBooking(rawBooking);
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -316,10 +384,15 @@ public class BookingController {
 
     /**
      * GET /api/bookings/update/{id} - Load booking data for update form
+     * Requires: CUSTOMER role (own booking only)
      */
     @GetMapping("/update/{id}")
+    @IsCustomer
     public ResponseEntity<Map<String, Object>> getUpdateBooking(@PathVariable String id) {
         try {
+            // Use OwnerValidationService for ownership validation
+            ownerValidationService.validateBookingOwnership(id);
+            
             BookingResponseDTO booking = bookingService.getBookingDetail(id);
             
             // Check if can be updated based on status
@@ -363,12 +436,17 @@ public class BookingController {
 
     /**
      * PUT /api/bookings/update/{id} - Update booking
+     * Requires: CUSTOMER role (own booking only)
      */
     @PutMapping("/update/{id}")
+    @IsCustomer
     public ResponseEntity<Map<String, Object>> updateBooking(
             @PathVariable String id,
             @RequestBody BookingRequestDTO request) {
         try {
+            // Use OwnerValidationService for ownership validation
+            ownerValidationService.validateBookingOwnership(id);
+            
             BookingResponseDTO updated = bookingService.updateBookingFromDTO(id, request);
             
             Map<String, Object> response = new HashMap<>();
@@ -384,14 +462,26 @@ public class BookingController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
     }
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+    }
 
     /**
      * POST /api/bookings/status/pay - Pay for booking
+     * Requires: CUSTOMER role (own booking only)
      */
     @PostMapping("/status/pay")
+    @IsCustomer
     public ResponseEntity<Map<String, Object>> payBookingStatus(@RequestBody Map<String, String> request) {
         try {
             String bookingId = request.get("bookingId");
+            
+            // Use OwnerValidationService for ownership validation
+            ownerValidationService.validateBookingOwnership(bookingId);
+            
             bookingService.payBookingById(bookingId);
             
             Map<String, Object> response = new HashMap<>();
@@ -409,11 +499,17 @@ public class BookingController {
 
     /**
      * POST /api/bookings/status/cancel - Cancel booking
+     * Requires: CUSTOMER role (own booking only)
      */
     @PostMapping("/status/cancel")
+    @IsCustomer
     public ResponseEntity<Map<String, Object>> cancelBookingStatus(@RequestBody Map<String, String> request) {
         try {
             String bookingId = request.get("bookingId");
+            
+            // Use OwnerValidationService for ownership validation
+            ownerValidationService.validateBookingOwnership(bookingId);
+            
             bookingService.cancelBookingById(bookingId);
             
             Map<String, Object> response = new HashMap<>();
@@ -431,11 +527,17 @@ public class BookingController {
 
     /**
      * POST /api/bookings/status/refund - Request refund
+     * Requires: CUSTOMER role (own booking only)
      */
     @PostMapping("/status/refund")
+    @IsCustomer
     public ResponseEntity<Map<String, Object>> refundBookingStatus(@RequestBody Map<String, String> request) {
         try {
             String bookingId = request.get("bookingId");
+            
+            // Use OwnerValidationService for ownership validation
+            ownerValidationService.validateBookingOwnership(bookingId);
+            
             bookingService.refundBookingById(bookingId);
             
             Map<String, Object> response = new HashMap<>();
@@ -453,13 +555,33 @@ public class BookingController {
 
     /**
      * GET /api/bookings/chart - Get monthly statistics for chart
+     * ACCOMMODATION_OWNER: Only shows statistics for their properties
+     * SUPERADMIN: Shows all statistics
      */
     @GetMapping("/chart")
+    @IsOwner
     public ResponseEntity<Map<String, Object>> getBookingStatistics(
             @RequestParam int month,
             @RequestParam int year) {
         try {
+            UserPrincipal user = ownerValidationService.getCurrentUser();
             List<PropertyStatisticsDTO> statistics = propertyService.getMonthlyStatistics(month, year);
+            
+            // Filter by owner if not superadmin
+            if (ownerValidationService.isOwner() && !ownerValidationService.isSuperadmin()) {
+                UUID ownerUuid = UUID.fromString(user.getUserId());
+                statistics = statistics.stream()
+                    .filter(stat -> {
+                        try {
+                            Property property = propertyService.getPropertyById(stat.getPropertyId())
+                                .orElse(null);
+                            return property != null && property.getOwnerId().equals(ownerUuid);
+                        } catch (Exception e) {
+                            return false;
+                        }
+                    })
+                    .collect(Collectors.toList());
+            }
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -489,5 +611,19 @@ public class BookingController {
             .availabilityStatus(room.getAvailabilityStatus())
             .activeRoom(room.getActiveRoom())
             .build();
+    }
+    
+    /**
+     * Get property owner ID from booking
+     */
+    private String getPropertyOwnerIdFromBooking(String bookingId) {
+        AccommodationBooking booking = bookingService.getBookingById(bookingId)
+            .orElseThrow(() -> new RuntimeException("Booking not found"));
+        
+        Room room = booking.getRoom();
+        RoomType roomType = room.getRoomType();
+        Property property = roomType.getProperty();
+        
+        return property.getOwnerId().toString();
     }
 }

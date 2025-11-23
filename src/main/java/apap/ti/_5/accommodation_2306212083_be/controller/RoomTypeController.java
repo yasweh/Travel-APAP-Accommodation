@@ -1,17 +1,23 @@
 package apap.ti._5.accommodation_2306212083_be.controller;
 
+import apap.ti._5.accommodation_2306212083_be.dto.UserPrincipal;
 import apap.ti._5.accommodation_2306212083_be.model.Property;
 import apap.ti._5.accommodation_2306212083_be.model.RoomType;
 import apap.ti._5.accommodation_2306212083_be.service.PropertyService;
+import apap.ti._5.accommodation_2306212083_be.service.OwnerValidationService;
 import apap.ti._5.accommodation_2306212083_be.repository.RoomTypeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @RestController
@@ -21,6 +27,7 @@ public class RoomTypeController {
 
     private final RoomTypeRepository roomTypeRepository;
     private final PropertyService propertyService;
+    private final OwnerValidationService ownerValidationService;
 
     /**
      * GET /api/room-types - Get all room types
@@ -45,12 +52,23 @@ public class RoomTypeController {
 
     /**
      * GET /api/room-types/{id} - Get room type by ID with its rooms
+     * Public access, but ACCOMMODATION_OWNER can only view room types from their properties
      */
     @GetMapping("/room-types/{id}")
     public ResponseEntity<Map<String, Object>> getRoomTypeById(@PathVariable String id) {
         try {
             RoomType roomType = roomTypeRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Room type not found"));
+            
+            // If user is authenticated and is an owner, use OwnerValidationService
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication != null && authentication.isAuthenticated() 
+                && authentication.getPrincipal() instanceof UserPrincipal) {
+                
+                if (ownerValidationService.isOwner() && !ownerValidationService.isSuperadmin()) {
+                    ownerValidationService.validateRoomTypeOwnership(roomType);
+                }
+            }
             
             // Build response with listRoom exposed
             Map<String, Object> roomTypeData = new HashMap<>();

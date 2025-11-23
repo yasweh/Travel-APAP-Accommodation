@@ -2,6 +2,9 @@ package apap.ti._5.accommodation_2306212083_be.controller;
 
 import apap.ti._5.accommodation_2306212083_be.model.Property;
 import apap.ti._5.accommodation_2306212083_be.model.RoomType;
+import apap.ti._5.accommodation_2306212083_be.security.annotations.IsOwner;
+import apap.ti._5.accommodation_2306212083_be.security.annotations.IsSuperadmin;
+import apap.ti._5.accommodation_2306212083_be.service.OwnerValidationService;
 import apap.ti._5.accommodation_2306212083_be.service.PropertyService;
 import apap.ti._5.accommodation_2306212083_be.service.RoomService;
 import apap.ti._5.accommodation_2306212083_be.repository.RoomTypeRepository;
@@ -20,6 +23,7 @@ public class PropertyController {
     private final PropertyService propertyService;
     private final RoomService roomService;
     private final RoomTypeRepository roomTypeRepository;
+    private final OwnerValidationService ownerValidationService;
 
     /**
      * GET /api/property - List all properties
@@ -121,8 +125,10 @@ public class PropertyController {
 
     /**
      * POST /api/property/create - Create new property with room types
+     * Requires: ACCOMMODATION_OWNER or SUPERADMIN role
      */
     @PostMapping("/create")
+    @IsOwner
     @SuppressWarnings("unchecked")
     public ResponseEntity<Map<String, Object>> createProperty(@RequestBody Map<String, Object> request) {
         try {
@@ -134,7 +140,9 @@ public class PropertyController {
             property.setProvince(((Number) request.get("province")).intValue());
             property.setDescription((String) request.get("description"));
             property.setOwnerName((String) request.get("ownerName"));
-            property.setOwnerId(UUID.fromString((String) request.get("ownerId")));
+            
+            // Auto-set ownerId from authenticated user using OwnerValidationService
+            ownerValidationService.setOwnerForNewProperty(property);
             
             // Extract room types if provided
             List<RoomType> roomTypes = new ArrayList<>();
@@ -178,10 +186,15 @@ public class PropertyController {
 
     /**
      * GET /api/property/update/{id} - Get property data for update form
+     * Requires: ACCOMMODATION_OWNER (own property) or SUPERADMIN
      */
     @GetMapping("/update/{id}")
+    @IsOwner
     public ResponseEntity<Map<String, Object>> getPropertyForUpdate(@PathVariable String id) {
         try {
+            // Validate ownership
+            ownerValidationService.validateOwnership(id);
+            
             Property property = propertyService.getPropertyById(id)
                 .orElseThrow(() -> new RuntimeException("Property not found"));
             
@@ -203,13 +216,18 @@ public class PropertyController {
 
     /**
      * PUT /api/property/update - Update property with room types
+     * Requires: ACCOMMODATION_OWNER (own property) or SUPERADMIN
      */
     @PutMapping("/update")
+    @IsOwner
     @SuppressWarnings("unchecked")
     public ResponseEntity<Map<String, Object>> updateProperty(@RequestBody Map<String, Object> request) {
         try {
             // Extract property ID
             String propertyId = (String) request.get("propertyId");
+            
+            // Validate ownership
+            ownerValidationService.validateOwnership(propertyId);
             
             // Get existing property
             Property existingProperty = propertyService.getPropertyById(propertyId)
@@ -288,8 +306,10 @@ public class PropertyController {
 
     /**
      * DELETE /api/property/delete/{id} - Soft delete property
+     * Requires: SUPERADMIN role only
      */
     @DeleteMapping("/delete/{id}")
+    @IsSuperadmin
     public ResponseEntity<Map<String, Object>> deleteProperty(@PathVariable String id) {
         try {
             propertyService.softDeleteProperty(id);
@@ -309,12 +329,17 @@ public class PropertyController {
 
     /**
      * POST /api/property/updateroom - Add room types to existing property
+     * Requires: ACCOMMODATION_OWNER (own property) or SUPERADMIN
      */
     @PostMapping("/updateroom")
+    @IsOwner
     @SuppressWarnings("unchecked")
     public ResponseEntity<Map<String, Object>> addRoomTypes(@RequestBody Map<String, Object> request) {
         try {
             String propertyId = (String) request.get("propertyId");
+            
+            // Validate ownership
+            ownerValidationService.validateOwnership(propertyId);
             
             // Get existing property
             Property property = propertyService.getPropertyById(propertyId)
