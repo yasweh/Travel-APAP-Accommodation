@@ -1,0 +1,64 @@
+# Development Profile Configuration
+# Run locally with: ./gradlew bootRun (default profile is 'dev')
+
+spring:
+  application:
+    name: accommodation-2306212083-be
+  
+  datasource:
+    url: jdbc:postgresql://localhost:35001/accommodation_dev
+    username: accommodation-dev
+    password: CLI-825.2025X
+
+    
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          batch_size: 20
+        order_inserts: true
+        order_updates: true
+
+# Server Configuration (Root Level)
+server:
+  port: 8080
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain
+  http2:
+    enabled: true
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    apap.ti: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
+# Profile Service Configuration
+profile:
+  service:
+    base-url: https://2306219575-be.hafizmuh.site
+    # For local development when external service is unavailable:
+    mock-enabled: false
+
+# Security Configuration (Hardcoded for Dev)
+accommodation:
+  security:
+    jwt:
+      secret: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+      expiration-ms: 86400000

@@ -21,14 +21,14 @@ public interface SupportTicketRepository extends JpaRepository<SupportTicket, St
      * @param userId The user ID
      * @return List of tickets
      */
-    List<SupportTicket> findByUserIdOrderByCreatedAtDesc(Long userId);
+    List<SupportTicket> findByUserIdOrderByCreatedAtDesc(String userId);
 
     /**
      * Find all tickets assigned to a specific admin
      * @param assignedAdminId The admin ID
      * @return List of tickets
      */
-    List<SupportTicket> findByAssignedAdminIdOrderByCreatedAtDesc(Long assignedAdminId);
+    List<SupportTicket> findByAssignedAdminIdOrderByCreatedAtDesc(String assignedAdminId);
 
     /**
      * Find all tickets with a specific status
@@ -49,7 +49,7 @@ public interface SupportTicketRepository extends JpaRepository<SupportTicket, St
      * @param status The ticket status
      * @return List of tickets
      */
-    List<SupportTicket> findByUserIdAndStatusOrderByCreatedAtDesc(Long userId, TicketStatus status);
+    List<SupportTicket> findByUserIdAndStatusOrderByCreatedAtDesc(String userId, TicketStatus status);
 
     /**
      * Find ticket by external booking reference

@@ -41,7 +41,7 @@ public class TicketMessage {
      * ID of the user/admin/vendor who sent this message
      */
     @Column(name = "sender_id", nullable = false)
-    private Long senderId;
+    private String senderId;
 
     /**
      * Type of the sender (USER, ADMIN, or VENDOR)

@@ -35,13 +35,13 @@ public class SupportTicket {
      * ID of the user who created the ticket
      */
     @Column(name = "user_id", nullable = false)
-    private Long userId;
+    private String userId;
 
     /**
      * ID of the admin assigned to handle this ticket (nullable if not yet assigned)
      */
     @Column(name = "assigned_admin_id")
-    private Long assignedAdminId;
+    private String assignedAdminId;
 
     /**
      * The external service where the booking was made

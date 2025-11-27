@@ -30,8 +30,8 @@ public class TicketDetailResponseDTO extends TicketResponseDTO {
     @Builder(builderMethodName = "detailBuilder")
     public TicketDetailResponseDTO(
             String ticketId,
-            Long userId,
-            Long assignedAdminId,
+            String userId,
+            String assignedAdminId,
             apap.ti._5.accommodation_2306212083_be.enums.ServiceSource externalServiceSource,
             String externalBookingId,
             String subject,

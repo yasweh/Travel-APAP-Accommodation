@@ -1,178 +1,130 @@
 package apap.ti._5.accommodation_2306212083_be.client;
 
-import apap.ti._5.accommodation_2306212083_be.dto.TokenValidationResponse;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
+import apap.ti._5.accommodation_2306212083_be.dto.LoginRequest;
+import apap.ti._5.accommodation_2306212083_be.dto.LoginResponse;
+import apap.ti._5.accommodation_2306212083_be.dto.LoginWrapper;
+import apap.ti._5.accommodation_2306212083_be.dto.ProfileValidateResponse;
+import apap.ti._5.accommodation_2306212083_be.dto.ProfileValidateWrapper;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
+import reactor.netty.http.client.HttpClient;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.time.Duration;
 
-/**
- * Client for Profile Service (https://2306219575-be.hafizmuh.site)
- * Handles authentication operations: login, register, token validation
- */
 @Component
-@RequiredArgsConstructor
 public class ProfileClient {
 
     private static final Logger logger = LoggerFactory.getLogger(ProfileClient.class);
+    private final WebClient webClient;
 
-    @Value("${profile.service.base-url:https://2306219575-be.hafizmuh.site}")
-    private String baseUrl;
+    public ProfileClient(@Value("${profile.service.base-url:https://2306219575-be.hafizmuh.site}") String baseUrl) {
+        logger.info("Initializing ProfileClient with base URL: {}", baseUrl);
 
-    private final RestTemplate restTemplate;
-    private final ObjectMapper objectMapper;
+        // Configure HttpClient to trust all certificates (INSECURE - FOR DEV ONLY)
+        HttpClient httpClient = HttpClient.create()
+                .secure(sslContextSpec -> {
+                    try {
+                        SslContext sslContext = SslContextBuilder.forClient()
+                                .trustManager(InsecureTrustManagerFactory.INSTANCE)
+                                .build();
+                        sslContextSpec.sslContext(sslContext);
+                    } catch (Exception e) {
+                        logger.error("Failed to configure SSL context", e);
+                    }
+                });
 
-    /**
-     * Validate JWT token with Profile Service
-     * 
-     * @param token JWT token to validate
-     * @return TokenValidationResponse with user details
-     */
-    public TokenValidationResponse validateToken(String token) {
-        try {
-            String url = baseUrl + "/api/auth/validate-token";
-            
-            HttpHeaders headers = new HttpHeaders();
-            headers.add("Cookie", "JWT_TOKEN=" + token);
-            headers.setContentType(MediaType.APPLICATION_JSON);
-
-            HttpEntity<String> entity = new HttpEntity<>(headers);
-            
-            ResponseEntity<String> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.POST,
-                    entity,
-                    String.class
-            );
-
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                TokenValidationResponse validationResponse = objectMapper.readValue(
-                        response.getBody(), 
-                        TokenValidationResponse.class
-                );
-                
-                logger.info("Token validation successful for user: {}", 
-                        validationResponse.getData() != null ? validationResponse.getData().getUsername() : "unknown");
-                
-                return validationResponse;
-            }
-        } catch (Exception e) {
-            logger.error("Token validation failed: {}", e.getMessage());
-        }
-        return null;
+        this.webClient = WebClient.builder()
+                .baseUrl(baseUrl)
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .build();
     }
 
-    /**
-     * Login to Profile Service
-     * 
-     * @param loginRequest Map containing username and password
-     * @return Response with JWT token
-     */
-    public Map<String, Object> login(Map<String, String> loginRequest) {
+    public ProfileValidateResponse validateToken(String token) {
+        if (token == null || token.isBlank()) return null;
         try {
-            String url = baseUrl + "/api/auth/login";
-            
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
+            logger.debug("Validating token with Profile Service...");
+            Mono<ProfileValidateWrapper> mono = webClient.post()
+                    .uri("/api/auth/validate-token")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                    .retrieve()
+                    .bodyToMono(ProfileValidateWrapper.class)
+                    .timeout(Duration.ofSeconds(5)) // Timeout after 5 seconds
+                    .doOnError(e -> logger.error("Error validating token: {}", e.getMessage()))
+                    .onErrorReturn(new ProfileValidateWrapper());
 
-            HttpEntity<Map<String, String>> entity = new HttpEntity<>(loginRequest, headers);
-            
-            ResponseEntity<String> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.POST,
-                    entity,
-                    String.class
-            );
-
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> result = objectMapper.readValue(response.getBody(), Map.class);
-                
-                // Extract JWT token from Set-Cookie header
-                HttpHeaders responseHeaders = response.getHeaders();
-                if (responseHeaders.containsKey(HttpHeaders.SET_COOKIE)) {
-                    result.put("cookie", responseHeaders.getFirst(HttpHeaders.SET_COOKIE));
-                }
-                
-                logger.info("Login successful for user: {}", loginRequest.get("username"));
-                return result;
-            }
-        } catch (Exception e) {
-            logger.error("Login failed: {}", e.getMessage());
+            ProfileValidateWrapper wrapper = mono.block();
+            return (wrapper != null) ? wrapper.getData() : null;
+        } catch (Exception ex) {
+            logger.error("Exception during token validation: {}", ex.getMessage());
+            return null;
         }
-        
-        Map<String, Object> errorResponse = new HashMap<>();
-        errorResponse.put("success", false);
-        errorResponse.put("message", "Login failed");
-        return errorResponse;
     }
 
-    /**
-     * Register new user to Profile Service
-     * 
-     * @param registerPayload Map containing registration details
-     * @return Response with registration status
-     */
-    public Map<String, Object> register(Map<String, Object> registerPayload) {
+    public LoginResponse login(LoginRequest req) {
         try {
-            String url = baseUrl + "/api/auth/register";
-            
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
+            logger.info("Attempting login for email: {}", req.getEmail());
 
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(registerPayload, headers);
-            
-            ResponseEntity<String> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.POST,
-                    entity,
-                    String.class
-            );
+            // Construct payload with email and password as requested
+            var payload = new java.util.HashMap<String, String>();
+            payload.put("email", req.getEmail());
+            payload.put("password", req.getPassword());
 
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> result = objectMapper.readValue(response.getBody(), Map.class);
-                
-                logger.info("Registration successful for user: {}", registerPayload.get("username"));
-                return result;
+            Mono<LoginWrapper> mono = webClient.post()
+                    .uri("/api/auth/login")
+                    .bodyValue(payload)
+                    .retrieve()
+                    .bodyToMono(LoginWrapper.class)
+                    .timeout(Duration.ofSeconds(5)) // Timeout after 5 seconds
+                    .doOnError(e -> {
+                        logger.error("Error during login request: {}", e.getMessage());
+                        if (e instanceof org.springframework.web.reactive.function.client.WebClientResponseException) {
+                            String responseBody = ((org.springframework.web.reactive.function.client.WebClientResponseException) e).getResponseBodyAsString();
+                            logger.error("External Service Error Body: {}", responseBody);
+                        }
+                    })
+                    .onErrorReturn(new LoginWrapper());
+
+            LoginWrapper wrapper = mono.block();
+            if (wrapper == null) {
+                logger.warn("Login response wrapper is null");
+                return null;
             }
-        } catch (Exception e) {
-            logger.error("Registration failed: {}", e.getMessage());
+            if (wrapper.getData() == null) {
+                logger.warn("Login response data is null. Status: {}, Message: {}", wrapper.getStatus(), wrapper.getMessage());
+            }
+            return wrapper.getData();
+        } catch (Exception ex) {
+            logger.error("Exception during login: {}", ex.getMessage());
+            return null;
         }
-        
-        Map<String, Object> errorResponse = new HashMap<>();
-        errorResponse.put("success", false);
-        errorResponse.put("message", "Registration failed");
-        return errorResponse;
     }
 
-    /**
-     * Get current user info from Profile Service
-     * 
-     * @param token JWT token
-     * @return User information
-     */
-    public Map<String, Object> getCurrentUser(String token) {
-        TokenValidationResponse validationResponse = validateToken(token);
-        
-        if (validationResponse != null && validationResponse.getData() != null) {
-            Map<String, Object> userInfo = new HashMap<>();
-            userInfo.put("userId", validationResponse.getData().getUserId());
-            userInfo.put("username", validationResponse.getData().getUsername());
-            userInfo.put("email", validationResponse.getData().getEmail());
-            userInfo.put("name", validationResponse.getData().getName());
-            userInfo.put("role", validationResponse.getData().getRole());
-            userInfo.put("valid", validationResponse.getData().getValid());
-            return userInfo;
+    public Object register(Object payload) {
+        try {
+            logger.info("Attempting registration...");
+            Mono<Object> mono = webClient.post()
+                    .uri("/api/auth/register")
+                    .bodyValue(payload)
+                    .retrieve()
+                    .bodyToMono(Object.class)
+                    .timeout(Duration.ofSeconds(5)) // Timeout after 5 seconds
+                    .doOnError(e -> logger.error("Error during registration: {}", e.getMessage()))
+                    .onErrorReturn(null);
+            return mono.block();
+        } catch (Exception ex) {
+            logger.error("Exception during registration: {}", ex.getMessage());
+            return null;
         }
-        
-        return null;
     }
 }

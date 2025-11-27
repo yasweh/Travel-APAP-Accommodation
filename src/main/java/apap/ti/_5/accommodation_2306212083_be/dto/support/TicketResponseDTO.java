@@ -25,12 +25,12 @@ public class TicketResponseDTO {
     /**
      * User ID who created the ticket
      */
-    private Long userId;
+    private String userId;
 
     /**
      * Admin ID assigned to this ticket (if any)
      */
-    private Long assignedAdminId;
+    private String assignedAdminId;
 
     /**
      * External service source

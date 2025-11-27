@@ -27,7 +27,7 @@ public interface SupportProgressRepository extends JpaRepository<SupportProgress
      * @param userId The user ID
      * @return List of progress updates
      */
-    List<SupportProgress> findByUserIdOrderByCreatedAtDesc(Long userId);
+    List<SupportProgress> findByUserIdOrderByCreatedAtDesc(String userId);
 
     /**
      * Count progress updates for a specific ticket

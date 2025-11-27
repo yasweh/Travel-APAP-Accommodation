@@ -165,7 +165,8 @@ public class OwnershipValidationService {
             return;
         }
         
-        AccommodationBooking booking = bookingService.getBookingById(bookingId);
+        AccommodationBooking booking = bookingService.getBookingById(bookingId)
+                .orElseThrow(() -> new RuntimeException("Booking not found"));
         
         // Customer hanya bisa akses booking miliknya
         if (isCustomer()) {
@@ -196,7 +197,8 @@ public class OwnershipValidationService {
     public void validateBookingOwnership(String bookingId) {
         UserPrincipal user = getCurrentUser();
         
-        AccommodationBooking booking = bookingService.getBookingById(bookingId);
+        AccommodationBooking booking = bookingService.getBookingById(bookingId)
+                .orElseThrow(() -> new RuntimeException("Booking not found"));
         
         // Hanya customer pemilik booking yang bisa modify
         if (!booking.getCustomerId().toString().equals(user.getUserId())) {

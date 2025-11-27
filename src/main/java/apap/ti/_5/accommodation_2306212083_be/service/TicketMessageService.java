@@ -9,7 +9,7 @@ import apap.ti._5.accommodation_2306212083_be.model.SupportTicket;
 import apap.ti._5.accommodation_2306212083_be.model.TicketMessage;
 import apap.ti._5.accommodation_2306212083_be.repository.SupportTicketRepository;
 import apap.ti._5.accommodation_2306212083_be.repository.TicketMessageRepository;
-import apap.ti._5.accommodation_2306212083_be.security.CurrentUser;
+import apap.ti._5.accommodation_2306212083_be.util.CurrentUser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -46,7 +46,7 @@ public class TicketMessageService {
         SupportTicket ticket = supportTicketRepository.findById(ticketId)
                 .orElseThrow(() -> new TicketNotFoundException(ticketId));
 
-        Long userId = CurrentUser.getUserId();
+        String userId = CurrentUser.getUserId();
         String role = CurrentUser.getRole();
         
         // Verify user has access to this ticket
@@ -108,7 +108,7 @@ public class TicketMessageService {
                 .orElseThrow(() -> new TicketNotFoundException(ticketId));
 
         // Verify user has access
-        Long userId = CurrentUser.getUserId();
+        String userId = CurrentUser.getUserId();
         if (!CurrentUser.isSuperadmin() && !ticket.getUserId().equals(userId)) {
             throw new UnauthorizedTicketAccessException(ticketId);
         }
@@ -131,7 +131,7 @@ public class TicketMessageService {
         SupportTicket ticket = supportTicketRepository.findById(ticketId)
                 .orElseThrow(() -> new TicketNotFoundException(ticketId));
 
-        Long userId = CurrentUser.getUserId();
+        String userId = CurrentUser.getUserId();
         if (!CurrentUser.isSuperadmin() && !ticket.getUserId().equals(userId)) {
             throw new UnauthorizedTicketAccessException(ticketId);
         }

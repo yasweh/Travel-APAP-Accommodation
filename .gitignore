@@ -35,3 +35,17 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### Production Secrets ###
+# Never commit production environment variables
+set-prod-env.bat
+set-prod-env.sh
+application-local.yml
+application-local.properties
+*.env.local
+.env.production.local
+
+### Logs ###
+logs/
+*.log
+/var/log/

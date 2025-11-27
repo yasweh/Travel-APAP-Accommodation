@@ -8,7 +8,7 @@ import apap.ti._5.accommodation_2306212083_be.model.SupportProgress;
 import apap.ti._5.accommodation_2306212083_be.model.SupportTicket;
 import apap.ti._5.accommodation_2306212083_be.repository.SupportProgressRepository;
 import apap.ti._5.accommodation_2306212083_be.repository.SupportTicketRepository;
-import apap.ti._5.accommodation_2306212083_be.security.CurrentUser;
+import apap.ti._5.accommodation_2306212083_be.util.CurrentUser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -45,7 +45,7 @@ public class SupportProgressService {
         SupportTicket ticket = supportTicketRepository.findById(ticketId)
                 .orElseThrow(() -> new TicketNotFoundException(ticketId));
 
-        Long userId = CurrentUser.getUserId();
+        String userId = CurrentUser.getUserId();
         String userName = CurrentUser.getName();
         String role = CurrentUser.getRole();
 
@@ -79,7 +79,7 @@ public class SupportProgressService {
                 .orElseThrow(() -> new TicketNotFoundException(ticketId));
 
         // Verify user has access
-        Long userId = CurrentUser.getUserId();
+        String userId = CurrentUser.getUserId();
         if (!CurrentUser.isSuperadmin() && !ticket.getUserId().equals(userId)) {
             throw new UnauthorizedTicketAccessException(ticketId);
         }

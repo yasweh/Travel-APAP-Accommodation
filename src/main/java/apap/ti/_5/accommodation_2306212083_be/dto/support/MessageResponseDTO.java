@@ -31,7 +31,7 @@ public class MessageResponseDTO {
     /**
      * ID of the message sender
      */
-    private Long senderId;
+    private String senderId;
 
     /**
      * Name of the sender

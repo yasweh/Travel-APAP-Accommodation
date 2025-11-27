@@ -30,7 +30,7 @@ public interface TicketMessageRepository extends JpaRepository<TicketMessage, Lo
      * @return Count of unread messages
      */
     @Query("SELECT COUNT(m) FROM TicketMessage m WHERE m.supportTicket.ticketId = :ticketId AND m.isRead = false AND m.senderId != :userId")
-    Long countUnreadMessagesForTicket(@Param("ticketId") String ticketId, @Param("userId") Long userId);
+    Long countUnreadMessagesForTicket(@Param("ticketId") String ticketId, @Param("userId") String userId);
 
     /**
      * Mark all messages in a ticket as read (except those from the current user)
@@ -39,7 +39,7 @@ public interface TicketMessageRepository extends JpaRepository<TicketMessage, Lo
      */
     @Modifying
     @Query("UPDATE TicketMessage m SET m.isRead = true WHERE m.supportTicket.ticketId = :ticketId AND m.senderId != :userId AND m.isRead = false")
-    void markAllMessagesAsRead(@Param("ticketId") String ticketId, @Param("userId") Long userId);
+    void markAllMessagesAsRead(@Param("ticketId") String ticketId, @Param("userId") String userId);
 
     /**
      * Find unread messages for a specific user in a ticket
@@ -48,5 +48,5 @@ public interface TicketMessageRepository extends JpaRepository<TicketMessage, Lo
      * @return List of unread messages
      */
     @Query("SELECT m FROM TicketMessage m WHERE m.supportTicket.ticketId = :ticketId AND m.isRead = false AND m.senderId != :userId ORDER BY m.createdAt ASC")
-    List<TicketMessage> findUnreadMessages(@Param("ticketId") String ticketId, @Param("userId") Long userId);
+    List<TicketMessage> findUnreadMessages(@Param("ticketId") String ticketId, @Param("userId") String userId);
 }

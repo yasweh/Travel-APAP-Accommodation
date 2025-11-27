@@ -48,9 +48,11 @@ public class BookingController {
      * CUSTOMER: can view own bookings
      * ACCOMMODATION_OWNER: can view bookings for their properties
      * SUPERADMIN: can view all bookings
+     * 
+     * TEMPORARILY DISABLED - RBAC commented for support feature development
      */
     @GetMapping
-    @PreAuthorize("hasAnyRole('CUSTOMER', 'ACCOMMODATION_OWNER', 'SUPERADMIN')")
+    // @PreAuthorize("hasAnyRole('CUSTOMER', 'ACCOMMODATION_OWNER', 'SUPERADMIN')") // COMMENTED - RBAC disabled
     public ResponseEntity<Map<String, Object>> listBookings(
             @RequestParam(required = false) String customerId,
             @RequestParam(required = false) Integer status) {
@@ -109,9 +111,11 @@ public class BookingController {
      * CUSTOMER: can view own booking
      * ACCOMMODATION_OWNER: can view booking for their property
      * SUPERADMIN: can view any booking
+     * 
+     * TEMPORARILY DISABLED - RBAC commented for support feature development
      */
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('CUSTOMER', 'ACCOMMODATION_OWNER', 'SUPERADMIN')")
+    // @PreAuthorize("hasAnyRole('CUSTOMER', 'ACCOMMODATION_OWNER', 'SUPERADMIN')") // COMMENTED - RBAC disabled
     public ResponseEntity<Map<String, Object>> detailBooking(@PathVariable String id) {
         try {
             // Use OwnerValidationService for access validation
@@ -456,12 +460,6 @@ public class BookingController {
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", e.getMessage());
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
-        }
-    }
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("message", e.getMessage());

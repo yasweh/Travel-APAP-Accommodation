@@ -1,7 +1,7 @@
 package apap.ti._5.accommodation_2306212083_be.security;
 
 import apap.ti._5.accommodation_2306212083_be.client.ProfileClient;
-import apap.ti._5.accommodation_2306212083_be.dto.TokenValidationResponse;
+import apap.ti._5.accommodation_2306212083_be.dto.ProfileValidateResponse;
 import apap.ti._5.accommodation_2306212083_be.dto.UserPrincipal;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -41,21 +41,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             if (token != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 // Validate token with Profile Service using ProfileClient
-                TokenValidationResponse validationResponse = profileClient.validateToken(token);
+                ProfileValidateResponse validationResponse = profileClient.validateToken(token);
 
-                if (validationResponse != null && 
-                    validationResponse.getData() != null && 
-                    Boolean.TRUE.equals(validationResponse.getData().getValid())) {
+                if (validationResponse != null && Boolean.TRUE.equals(validationResponse.getValid())) {
 
                     // Map Profile Service role to Accommodation Service role
-                    String mappedRole = mapRole(validationResponse.getData().getRole());
+                    String mappedRole = mapRole(validationResponse.getRole());
 
                     // Create UserPrincipal
                     UserPrincipal userPrincipal = UserPrincipal.builder()
-                            .userId(validationResponse.getData().getUserId())
-                            .username(validationResponse.getData().getUsername())
-                            .email(validationResponse.getData().getEmail())
-                            .name(validationResponse.getData().getName())
+                            .userId(validationResponse.getUserId())
+                            .username(validationResponse.getUsername())
+                            .email(validationResponse.getEmail())
+                            .name(validationResponse.getName())
                             .role(mappedRole)
                             .build();
 
@@ -101,19 +99,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     /**
      * Map Profile Service roles to Accommodation Service roles
-     * ADMIN -> SUPERADMIN
-     * TRAVEL_AGENT -> ACCOMMODATION_OWNER
-     * CUSTOMER -> CUSTOMER
+     * Uses exact role names as returned by Profile Service:
+     * "Superadmin", "Accommodation Owner", "Customer"
      */
     private String mapRole(String profileServiceRole) {
         if (profileServiceRole == null) {
-            return "CUSTOMER";
+            return "Customer";
         }
-        
-        return switch (profileServiceRole.toUpperCase()) {
-            case "ADMIN" -> "SUPERADMIN";
-            case "TRAVEL_AGENT" -> "ACCOMMODATION_OWNER";
-            default -> "CUSTOMER";
-        };
+        // Return the role as-is since we want to match the external service exactly
+        return profileServiceRole;
     }
 }

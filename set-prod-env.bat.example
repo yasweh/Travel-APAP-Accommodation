@@ -1,0 +1,49 @@
+@echo off
+REM Template for setting production environment variables
+REM Copy this file to set-prod-env.bat and fill in actual values
+
+echo Setting Production Environment Variables...
+
+REM ============================================
+REM DATABASE Configuration
+REM ============================================
+set DATABASE_URL_PROD=jdbc:postgresql://your-prod-host:5432/accommodation_prod
+set DATABASE_USERNAME=your_prod_user
+set DATABASE_PASSWORD=your_prod_password
+
+REM ============================================
+REM JWT Configuration
+REM ============================================
+REM Generate secure key: openssl rand -base64 64
+set JWT_SECRET_KEY=your-super-secret-jwt-key-minimum-256-bits-change-this-in-production
+
+REM ============================================
+REM CORS Configuration
+REM ============================================
+set CORS_ALLOWED_ORIGINS=https://2306212083-fe.hafizmuh.site,https://www.yourdomain.com
+
+REM ============================================
+REM Profile Service (Optional Override)
+REM ============================================
+set PROFILE_SERVICE_URL=https://2306219575-be.hafizmuh.site
+
+REM ============================================
+REM Server Configuration (Optional)
+REM ============================================
+REM set SERVER_PORT=8080
+
+echo.
+echo Production environment variables have been set!
+echo.
+echo You can now run: run-prod.bat
+echo.
+
+REM Verify (masked sensitive values)
+echo Current Settings:
+echo   DATABASE_URL_PROD: %DATABASE_URL_PROD%
+echo   DATABASE_USERNAME: %DATABASE_USERNAME%
+echo   DATABASE_PASSWORD: [MASKED]
+echo   JWT_SECRET_KEY: [MASKED]
+echo   CORS_ALLOWED_ORIGINS: %CORS_ALLOWED_ORIGINS%
+echo   PROFILE_SERVICE_URL: %PROFILE_SERVICE_URL%
+echo.

@@ -41,7 +41,7 @@ public class SupportProgress {
      * ID of the admin/vendor who created this progress update
      */
     @Column(name = "user_id", nullable = false)
-    private Long userId;
+    private String userId;
 
     /**
      * Name of the user who created the progress update

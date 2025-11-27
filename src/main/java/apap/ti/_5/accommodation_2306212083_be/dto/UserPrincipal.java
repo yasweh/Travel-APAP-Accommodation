@@ -21,11 +21,13 @@ public class UserPrincipal implements UserDetails {
     private String username;
     private String email;
     private String name;
-    private String role; // SUPERADMIN, ACCOMMODATION_OWNER, CUSTOMER
+    private String role; // Superadmin, Accommodation Owner, Customer
     
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role));
+        // Use the role name directly as the authority, without adding "ROLE_" prefix
+        // This ensures we match exactly what is in the database/external service
+        return Collections.singletonList(new SimpleGrantedAuthority(role));
     }
     
     @Override

@@ -30,7 +30,7 @@ public class ProgressResponseDTO {
     /**
      * ID of the user who created this progress
      */
-    private Long userId;
+    private String userId;
 
     /**
      * Name of the user

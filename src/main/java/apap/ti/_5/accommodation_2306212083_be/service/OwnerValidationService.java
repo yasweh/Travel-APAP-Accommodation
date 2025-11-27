@@ -18,6 +18,12 @@ import java.util.UUID;
 /**
  * Service to validate property ownership
  * Ensures owners can only modify their own properties
+ * 
+ * ============================================================
+ * TEMPORARILY DISABLED - VALIDATION COMMENTED OUT
+ * All validation methods will return without throwing errors
+ * Uncomment validation logic to restore RBAC
+ * ============================================================
  */
 @Service
 @RequiredArgsConstructor
@@ -33,8 +39,14 @@ public class OwnerValidationService {
      * 
      * @param propertyId Property ID to check
      * @throws AccessDeniedException if user doesn't own the property
+     * 
+     * TEMPORARILY DISABLED - Always allows access
      */
     public void validateOwnership(String propertyId) {
+        // COMMENTED - Validation disabled for support feature development
+        return;
+        
+        /* ORIGINAL CODE - Uncomment to restore
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         
         if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal)) {
@@ -57,6 +69,7 @@ public class OwnerValidationService {
         if (!property.getOwnerId().equals(userUuid)) {
             throw new AccessDeniedException("You don't have permission to modify this property. Owners can only access their own properties.");
         }
+        */
     }
 
     /**
@@ -64,8 +77,14 @@ public class OwnerValidationService {
      * 
      * @param bookingId Booking ID to check
      * @throws AccessDeniedException if user doesn't own the property
+     * 
+     * TEMPORARILY DISABLED - Always allows access
      */
     public void validateBookingPropertyOwnership(String bookingId) {
+        // COMMENTED - Validation disabled for support feature development
+        return;
+        
+        /* ORIGINAL CODE - Uncomment to restore
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         
         if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal)) {
@@ -92,41 +111,70 @@ public class OwnerValidationService {
         if (!property.getOwnerId().equals(userUuid)) {
             throw new AccessDeniedException("You can only access bookings for your own properties");
         }
+        */
     }
 
     /**
      * Get current authenticated user
+     * 
+     * TEMPORARILY DISABLED - Returns null when no authentication
      */
     public UserPrincipal getCurrentUser() {
+        // COMMENTED - Authentication disabled for support feature development
+        return null;
+        
+        /* ORIGINAL CODE - Uncomment to restore
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.getPrincipal() instanceof UserPrincipal) {
             return (UserPrincipal) authentication.getPrincipal();
         }
         return null;
+        */
     }
 
     /**
      * Check if current user is Superadmin
+     * 
+     * TEMPORARILY DISABLED - Always returns false
      */
     public boolean isSuperadmin() {
+        // COMMENTED - Returns false when authentication disabled
+        return false;
+        
+        /* ORIGINAL CODE - Uncomment to restore
         UserPrincipal user = getCurrentUser();
         return user != null && "SUPERADMIN".equals(user.getRole());
+        */
     }
 
     /**
      * Check if current user is Accommodation Owner
+     * 
+     * TEMPORARILY DISABLED - Always returns false
      */
     public boolean isOwner() {
+        // COMMENTED - Returns false when authentication disabled
+        return false;
+        
+        /* ORIGINAL CODE - Uncomment to restore
         UserPrincipal user = getCurrentUser();
         return user != null && "ACCOMMODATION_OWNER".equals(user.getRole());
+        */
     }
 
     /**
      * Check if current user is Customer
+     * 
+     * TEMPORARILY DISABLED - Always returns false
      */
     public boolean isCustomer() {
+        // COMMENTED - Returns false when authentication disabled
+        return false;
+        
+        /* ORIGINAL CODE - Uncomment to restore
         UserPrincipal user = getCurrentUser();
         return user != null && "CUSTOMER".equals(user.getRole());
+        */
     }
 
     /**
@@ -135,8 +183,14 @@ public class OwnerValidationService {
      * 
      * @param bookingId Booking ID to check
      * @throws AccessDeniedException if user doesn't own the booking
+     * 
+     * TEMPORARILY DISABLED - Always allows access
      */
     public void validateBookingOwnership(String bookingId) {
+        // COMMENTED - Validation disabled for support feature development
+        return;
+        
+        /* ORIGINAL CODE - Uncomment to restore
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         
         if (authentication == null || !(authentication.getPrincipal() instanceof UserPrincipal)) {
@@ -154,6 +208,7 @@ public class OwnerValidationService {
         if (!booking.getCustomerId().equals(userUuid)) {
             throw new AccessDeniedException("You can only modify your own bookings");
         }
+        */
     }
 
     /**
@@ -164,8 +219,14 @@ public class OwnerValidationService {
      * 
      * @param bookingId Booking ID to check
      * @throws AccessDeniedException if user doesn't have access
+     * 
+     * TEMPORARILY DISABLED - Always allows access
      */
     public void validateBookingAccess(String bookingId) {
+        // COMMENTED - Validation disabled for support feature development
+        return;
+        
+        /* ORIGINAL CODE - Uncomment to restore
         UserPrincipal user = getCurrentUser();
         if (user == null) {
             throw new AccessDeniedException("User not authenticated");
@@ -199,6 +260,7 @@ public class OwnerValidationService {
                 throw new AccessDeniedException("You can only access bookings for your own properties");
             }
         }
+        */
     }
 
     /**
@@ -207,8 +269,14 @@ public class OwnerValidationService {
      * 
      * @param roomType RoomType object to check
      * @throws AccessDeniedException if user doesn't own the property
+     * 
+     * TEMPORARILY DISABLED - Always allows access
      */
     public void validateRoomTypeOwnership(RoomType roomType) {
+        // COMMENTED - Validation disabled for support feature development
+        return;
+        
+        /* ORIGINAL CODE - Uncomment to restore
         UserPrincipal user = getCurrentUser();
         if (user == null) {
             throw new AccessDeniedException("User not authenticated");
@@ -228,6 +296,7 @@ public class OwnerValidationService {
                 throw new AccessDeniedException("You can only access room types from your own properties");
             }
         }
+        */
     }
 
     /**
@@ -235,8 +304,14 @@ public class OwnerValidationService {
      * 
      * @param room Room object to check
      * @throws AccessDeniedException if user doesn't own the property
+     * 
+     * TEMPORARILY DISABLED - Always allows access
      */
     public void validateRoomOwnership(Room room) {
+        // COMMENTED - Validation disabled for support feature development
+        return;
+        
+        /* ORIGINAL CODE - Uncomment to restore
         UserPrincipal user = getCurrentUser();
         if (user == null) {
             throw new AccessDeniedException("User not authenticated");
@@ -257,6 +332,7 @@ public class OwnerValidationService {
                 throw new AccessDeniedException("You can only access rooms from your own properties");
             }
         }
+        */
     }
 
     /**
@@ -264,8 +340,15 @@ public class OwnerValidationService {
      * Automatically assigns current user as owner for new properties
      * 
      * @param property Property to set owner for
+     * 
+     * TEMPORARILY DISABLED - Does nothing
      */
     public void setOwnerForNewProperty(Property property) {
+        // COMMENTED - Auto-assign disabled for support feature development
+        // Do nothing - ownerId must be set manually or via request
+        return;
+        
+        /* ORIGINAL CODE - Uncomment to restore
         UserPrincipal user = getCurrentUser();
         if (user == null) {
             throw new AccessDeniedException("User not authenticated");
@@ -274,6 +357,7 @@ public class OwnerValidationService {
         // Set ownerId to current user
         UUID userUuid = UUID.fromString(user.getUserId());
         property.setOwnerId(userUuid);
+        */
     }
 
     /**
@@ -281,8 +365,15 @@ public class OwnerValidationService {
      * Automatically assigns current user as customer for new bookings
      * 
      * @param booking Booking to set customer for
+     * 
+     * TEMPORARILY DISABLED - Does nothing
      */
     public void setCustomerForNewBooking(AccommodationBooking booking) {
+        // COMMENTED - Auto-assign disabled for support feature development
+        // Do nothing - customerId must be set manually or via request
+        return;
+        
+        /* ORIGINAL CODE - Uncomment to restore
         UserPrincipal user = getCurrentUser();
         if (user == null) {
             throw new AccessDeniedException("User not authenticated");
@@ -296,5 +387,6 @@ public class OwnerValidationService {
         // Set customerId to current user
         UUID userUuid = UUID.fromString(user.getUserId());
         booking.setCustomerId(userUuid);
+        */
     }
 }

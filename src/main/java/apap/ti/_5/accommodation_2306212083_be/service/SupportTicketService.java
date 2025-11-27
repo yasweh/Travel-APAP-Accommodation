@@ -9,7 +9,7 @@ import apap.ti._5.accommodation_2306212083_be.model.SupportProgress;
 import apap.ti._5.accommodation_2306212083_be.repository.SupportTicketRepository;
 import apap.ti._5.accommodation_2306212083_be.repository.TicketMessageRepository;
 import apap.ti._5.accommodation_2306212083_be.repository.SupportProgressRepository;
-import apap.ti._5.accommodation_2306212083_be.security.CurrentUser;
+import apap.ti._5.accommodation_2306212083_be.util.CurrentUser;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -56,11 +56,18 @@ public class SupportTicketService {
      * Create a new support ticket
      * @param request The ticket creation request
      * @return Created ticket response
+     * 
+     * TEMPORARILY MODIFIED - Security disabled, userId hardcoded for development
      */
     public TicketResponseDTO createTicket(CreateTicketRequestDTO request) {
-        Long userId = CurrentUser.getUserId();
+        // TEMPORARY: Use dummy user ID since auth is disabled
+        String userId = CurrentUser.getUserId();
+        if (userId == null) {
+            userId = "00000000-0000-0000-0000-000000000001"; // Dummy UUID for testing
+            log.warn("Auth disabled - using dummy userId for ticket creation");
+        }
         
-        // Validate booking exists and user owns it
+        // Validate booking exists (skip user ownership check for now)
         BookingInfoDTO bookingInfo = validateAndFetchBooking(
             request.getExternalServiceSource(),
             request.getExternalBookingId(),
@@ -94,10 +101,18 @@ public class SupportTicketService {
     /**
      * Get all tickets for the current user
      * @return List of tickets
+     * 
+     * TEMPORARILY MODIFIED - Security disabled, show all tickets
      */
     @Transactional(readOnly = true)
     public List<TicketResponseDTO> getMyTickets() {
-        Long userId = CurrentUser.getUserId();
+        String userId = CurrentUser.getUserId();
+        if (userId == null) {
+            // TEMPORARY: Show all tickets when auth is disabled
+            log.warn("Auth disabled - returning all tickets");
+            return getAllTicketsDev();
+        }
+        
         List<SupportTicket> tickets = supportTicketRepository.findByUserIdOrderByCreatedAtDesc(userId);
         
         return tickets.stream()
@@ -148,7 +163,7 @@ public class SupportTicketService {
                 .orElseThrow(() -> new TicketNotFoundException(ticketId));
 
         // Verify user has access to this ticket
-        Long userId = CurrentUser.getUserId();
+        String userId = CurrentUser.getUserId();
         if (!CurrentUser.isSuperadmin() && !ticket.getUserId().equals(userId)) {
             throw new UnauthorizedTicketAccessException(ticketId);
         }
@@ -204,7 +219,7 @@ public class SupportTicketService {
         SupportTicket ticket = supportTicketRepository.findById(ticketId)
                 .orElseThrow(() -> new TicketNotFoundException(ticketId));
 
-        Long userId = CurrentUser.getUserId();
+        String userId = CurrentUser.getUserId();
         if (!CurrentUser.isSuperadmin() && !ticket.getUserId().equals(userId)) {
             throw new UnauthorizedTicketAccessException(ticketId);
         }
@@ -221,7 +236,7 @@ public class SupportTicketService {
      * @param ticketId The ticket ID
      * @param adminId The admin ID to assign
      */
-    public void assignTicket(String ticketId, Long adminId) {
+    public void assignTicket(String ticketId, String adminId) {
         if (!CurrentUser.isSuperadmin()) {
             throw new UnauthorizedTicketAccessException("Only admins can assign tickets");
         }
@@ -283,7 +298,7 @@ public class SupportTicketService {
      * @param userId The user ID
      * @return Booking information
      */
-    private BookingInfoDTO validateAndFetchBooking(ServiceSource serviceSource, String bookingId, Long userId) {
+    private BookingInfoDTO validateAndFetchBooking(ServiceSource serviceSource, String bookingId, String userId) {
         try {
             String baseUrl = SERVICE_BASE_URLS.get(serviceSource);
             String endpoint = determineBookingEndpoint(serviceSource, bookingId);
@@ -301,9 +316,7 @@ public class SupportTicketService {
                 
                 // Verify user owns this booking
                 Object ownerIdObj = bookingData.get("userId");
-                Long ownerId = ownerIdObj instanceof Number ? 
-                    ((Number) ownerIdObj).longValue() : 
-                    Long.parseLong(ownerIdObj.toString());
+                String ownerId = ownerIdObj.toString();
                 
                 if (!ownerId.equals(userId)) {
                     throw BookingValidationException.notBookingOwner(bookingId);
@@ -485,5 +498,22 @@ public class SupportTicketService {
             }
         }
         return null;
+    }
+    
+    /**
+     * TEMPORARY: Get all tickets for development (auth disabled)
+     */
+    private List<TicketResponseDTO> getAllTicketsDev() {
+        List<SupportTicket> tickets = supportTicketRepository.findAllByOrderByCreatedAtDesc();
+        
+        return tickets.stream()
+                .map(ticket -> {
+                    BookingInfoDTO bookingInfo = fetchBookingInfoSafely(
+                        ticket.getExternalServiceSource(), 
+                        ticket.getExternalBookingId()
+                    );
+                    return mapToResponseDTO(ticket, bookingInfo, 0);
+                })
+                .collect(Collectors.toList());
     }
 }

@@ -13,13 +13,25 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
+
 /**
  * Security Configuration for Accommodation Service
  * Integrates with Profile Service for JWT authentication
+ * 
+ * ============================================================
+ * TEMPORARILY DISABLED - SECURITY & RBAC COMMENTED OUT
+ * Fokus development fitur support ticket dulu
+ * Nanti uncomment untuk mengaktifkan kembali security
+ * ============================================================
  */
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity(prePostEnabled = true)
+// @EnableMethodSecurity(prePostEnabled = true) // COMMENTED - Disable method security
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -27,7 +39,42 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        // ============================================================
+        // TEMPORARILY DISABLED - ALL ENDPOINTS ARE PUBLIC
+        // Uncomment bagian bawah untuk restore RBAC
+        // ============================================================
         http
+            // Configure CORS
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            
+            // Disable CSRF for stateless API
+            .csrf(AbstractHttpConfigurer::disable)
+            
+            // Configure session management as stateless
+            .sessionManagement(session -> 
+                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            
+            // TEMPORARILY: Allow all requests without authentication
+            .authorizeHttpRequests(auth -> auth
+                .anyRequest().permitAll()
+            );
+            
+        // COMMENTED - JWT filter temporarily disabled
+        // .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
+    }
+    
+    /* ============================================================
+     * ORIGINAL SECURITY CONFIGURATION - COMMENTED OUT
+     * Uncomment untuk restore RBAC
+     * ============================================================
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+            // Configure CORS
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            
             // Disable CSRF for stateless API
             .csrf(AbstractHttpConfigurer::disable)
             
@@ -57,18 +104,18 @@ public class SecurityConfig {
                 
                 // ========== CUSTOMER ONLY ENDPOINTS ==========
                 
-                // Create booking - Customer only
-                .requestMatchers(HttpMethod.POST, "/api/bookings/create").hasRole("CUSTOMER")
+                // Create booking - Customer and Superadmin
+                .requestMatchers(HttpMethod.POST, "/api/bookings/create").hasAnyAuthority("Customer", "Superadmin")
                 
-                // Update/Pay/Cancel/Refund booking - Customer only (ownership validated in controller)
-                .requestMatchers(HttpMethod.GET, "/api/bookings/update/*").hasRole("CUSTOMER")
-                .requestMatchers(HttpMethod.PUT, "/api/bookings/update/*").hasRole("CUSTOMER")
-                .requestMatchers(HttpMethod.PUT, "/api/bookings/pay/*").hasRole("CUSTOMER")
-                .requestMatchers(HttpMethod.PUT, "/api/bookings/cancel/*").hasRole("CUSTOMER")
-                .requestMatchers(HttpMethod.PUT, "/api/bookings/refund/*").hasRole("CUSTOMER")
-                .requestMatchers(HttpMethod.POST, "/api/bookings/status/pay").hasRole("CUSTOMER")
-                .requestMatchers(HttpMethod.POST, "/api/bookings/status/cancel").hasRole("CUSTOMER")
-                .requestMatchers(HttpMethod.POST, "/api/bookings/status/refund").hasRole("CUSTOMER")
+                // Update/Pay/Cancel/Refund booking - Customer and Superadmin
+                .requestMatchers(HttpMethod.GET, "/api/bookings/update/*").hasAnyAuthority("Customer", "Superadmin")
+                .requestMatchers(HttpMethod.PUT, "/api/bookings/update/*").hasAnyAuthority("Customer", "Superadmin")
+                .requestMatchers(HttpMethod.PUT, "/api/bookings/pay/*").hasAnyAuthority("Customer", "Superadmin")
+                .requestMatchers(HttpMethod.PUT, "/api/bookings/cancel/*").hasAnyAuthority("Customer", "Superadmin")
+                .requestMatchers(HttpMethod.PUT, "/api/bookings/refund/*").hasAnyAuthority("Customer", "Superadmin")
+                .requestMatchers(HttpMethod.POST, "/api/bookings/status/pay").hasAnyAuthority("Customer", "Superadmin")
+                .requestMatchers(HttpMethod.POST, "/api/bookings/status/cancel").hasAnyAuthority("Customer", "Superadmin")
+                .requestMatchers(HttpMethod.POST, "/api/bookings/status/refund").hasAnyAuthority("Customer", "Superadmin")
                 
                 // ========== SUPPORT TICKET ENDPOINTS ==========
                 
@@ -81,33 +128,33 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.PUT, "/api/support-tickets/*/close").authenticated()
                 
                 // Admin support ticket endpoints - Superadmin only
-                .requestMatchers("/api/admin/support-tickets/**").hasRole("SUPERADMIN")
+                .requestMatchers("/api/admin/support-tickets/**").hasAuthority("Superadmin")
                 
                 // ========== OWNER + SUPERADMIN ENDPOINTS ==========
                 
                 // Property management - Owner (own properties) + Superadmin (all)
-                .requestMatchers(HttpMethod.GET, "/api/property/update/*").hasAnyRole("ACCOMMODATION_OWNER", "SUPERADMIN")
-                .requestMatchers(HttpMethod.POST, "/api/property/create").hasAnyRole("ACCOMMODATION_OWNER", "SUPERADMIN")
-                .requestMatchers(HttpMethod.PUT, "/api/property/update").hasAnyRole("ACCOMMODATION_OWNER", "SUPERADMIN")
-                .requestMatchers(HttpMethod.POST, "/api/property/updateroom").hasAnyRole("ACCOMMODATION_OWNER", "SUPERADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/property/update/*").hasAnyAuthority("Accommodation Owner", "Superadmin")
+                .requestMatchers(HttpMethod.POST, "/api/property/create").hasAnyAuthority("Accommodation Owner", "Superadmin")
+                .requestMatchers(HttpMethod.PUT, "/api/property/update").hasAnyAuthority("Accommodation Owner", "Superadmin")
+                .requestMatchers(HttpMethod.POST, "/api/property/updateroom").hasAnyAuthority("Accommodation Owner", "Superadmin")
                 
                 // Maintenance management - Owner (own properties) + Superadmin (all)
-                .requestMatchers(HttpMethod.POST, "/api/property/maintenance/add").hasAnyRole("ACCOMMODATION_OWNER", "SUPERADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/property/maintenance/add").hasAnyAuthority("Accommodation Owner", "Superadmin")
                 .requestMatchers(HttpMethod.GET, "/api/property/maintenance", "/api/property/maintenance/*",
                                 "/api/property/maintenance/room-type/*", "/api/property/maintenance/room/*")
-                    .hasAnyRole("ACCOMMODATION_OWNER", "SUPERADMIN")
+                    .hasAnyAuthority("Accommodation Owner", "Superadmin")
                 
                 // Statistics/Charts - Owner (own properties) + Superadmin (all)
-                .requestMatchers(HttpMethod.GET, "/api/bookings/chart").hasAnyRole("ACCOMMODATION_OWNER", "SUPERADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/bookings/chart").hasAnyAuthority("Accommodation Owner", "Superadmin")
                 
                 // View bookings - Customer (own), Owner (own properties), Superadmin (all)
                 .requestMatchers(HttpMethod.GET, "/api/bookings", "/api/bookings/*")
-                    .hasAnyRole("CUSTOMER", "ACCOMMODATION_OWNER", "SUPERADMIN")
+                    .hasAnyAuthority("Customer", "Accommodation Owner", "Superadmin")
                 
                 // ========== SUPERADMIN ONLY ENDPOINTS ==========
                 
-                // Delete property - Superadmin only
-                .requestMatchers(HttpMethod.DELETE, "/api/property/delete/*").hasRole("SUPERADMIN")
+                // Delete property - Superadmin and Accommodation Owner (own property)
+                .requestMatchers(HttpMethod.DELETE, "/api/property/delete/*").hasAnyAuthority("Superadmin", "Accommodation Owner")
                 
                 // All other endpoints require authentication
                 .anyRequest().authenticated()
@@ -117,5 +164,22 @@ public class SecurityConfig {
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+    */
+    
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOriginPatterns(List.of(
+            "http://localhost:5173", 
+            "https://2306212083-fe.hafizmuh.site"
+        )); // Allow Frontend URLs
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setAllowCredentials(true); // Important for Cookies
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
     }
 }

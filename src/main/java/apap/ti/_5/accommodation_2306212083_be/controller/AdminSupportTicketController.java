@@ -56,8 +56,8 @@ public class AdminSupportTicketController {
     @PutMapping("/{ticketId}/assign")
     public ResponseEntity<Map<String, String>> assignTicket(
             @PathVariable String ticketId,
-            @RequestBody Map<String, Long> body) {
-        Long adminId = body.get("adminId");
+            @RequestBody Map<String, String> body) {
+        String adminId = body.get("adminId");
         supportTicketService.assignTicket(ticketId, adminId);
         return ResponseEntity.ok(Map.of("message", "Ticket assigned successfully"));
     }
