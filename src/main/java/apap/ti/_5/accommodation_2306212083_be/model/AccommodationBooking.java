@@ -51,14 +51,6 @@ public class AccommodationBooking {
     @Builder.Default
     private Boolean isBreakfast = false;
 
-    @Column(name = "refund", nullable = false)
-    @Builder.Default
-    private Integer refund = 0;
-
-    @Column(name = "extra_pay", nullable = false)
-    @Builder.Default
-    private Integer extraPay = 0;
-
     @Column(name = "capacity", nullable = false)
     private Integer capacity;
 

@@ -51,10 +51,19 @@ public class SupportTicketController {
         log.info("GET /api/support-tickets - userId={}, role={}, status={}, serviceSource={}", 
                 userId, currentUser.getRole(), status, serviceSource);
         
-        // Note: For Accommodation Owner, additional filtering by propertyId should be done in service layer
-        // For now, we use userId which works for Customer role
-        // TODO: Implement property-based filtering for Accommodation Owner in service layer
-        List<TicketResponseDTO> tickets = supportTicketService.getAllTickets(userId, status, serviceSource);
+        List<TicketResponseDTO> tickets;
+        
+        if (SecurityUtil.isCustomer()) {
+            // Customer: Only their own tickets
+            tickets = supportTicketService.getAllTickets(userId, status, serviceSource);
+        } else if (SecurityUtil.isAccommodationOwner()) {
+            // Accommodation Owner: Filter by properties they own (pass null userId to get all, filter in service)
+            tickets = supportTicketService.getAllTicketsForOwner(userId, status, serviceSource);
+        } else {
+            // Superadmin: All tickets (pass null userId)
+            tickets = supportTicketService.getAllTickets(null, status, serviceSource);
+        }
+        
         return ResponseEntity.ok(tickets);
     }
     
@@ -68,10 +77,12 @@ public class SupportTicketController {
         
         UserPrincipal currentUser = SecurityUtil.getCurrentUser();
         UUID userId = UUID.fromString(currentUser.getUserId());
+        String role = currentUser.getRole();
         
-        log.info("GET /api/support-tickets/{} - userId={}, role={}", id, userId, currentUser.getRole());
+        log.info("GET /api/support-tickets/{} - userId={}, role={}", id, userId, role);
         
-        TicketDetailResponseDTO ticket = supportTicketService.getTicketDetail(id, userId);
+        // Pass role to service for proper access control
+        TicketDetailResponseDTO ticket = supportTicketService.getTicketDetailWithAccess(id, userId, role);
         return ResponseEntity.ok(ticket);
     }
     
@@ -97,15 +108,25 @@ public class SupportTicketController {
     /**
      * PATCH /api/support-tickets/{id}/status
      * Update ticket status
+     * Customer can only close tickets, Admin/Owner can change to any status
      */
     @PatchMapping("/{id}/status")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<TicketResponseDTO> updateTicketStatus(
             @PathVariable UUID id,
             @Valid @RequestBody UpdateStatusRequestDTO request) {
         
-        log.info("PATCH /api/support-tickets/{}/status - Updating to {}", id, request.getStatus());
+        UserPrincipal currentUser = SecurityUtil.getCurrentUser();
+        UUID userId = UUID.fromString(currentUser.getUserId());
+        String role = currentUser.getRole();
         
-        TicketResponseDTO ticket = supportTicketService.updateTicketStatus(id, request);
+        log.info("PATCH /api/support-tickets/{}/status - Updating to {} by userId={}, role={}", 
+                id, request.getStatus(), userId, role);
+        
+        // Set updatedBy to current user
+        request.setUpdatedBy(userId);
+        
+        TicketResponseDTO ticket = supportTicketService.updateTicketStatusWithPermissionCheck(id, request, userId, role);
         return ResponseEntity.ok(ticket);
     }
     
@@ -129,15 +150,24 @@ public class SupportTicketController {
     /**
      * POST /api/support-tickets/{id}/progress
      * Add progress entry to ticket
+     * Only Admin or Accommodation Owner (who owns the property) can add progress
      */
     @PostMapping("/{id}/progress")
+    @PreAuthorize("hasAnyAuthority('Superadmin', 'Accommodation Owner')")
     public ResponseEntity<ProgressResponseDTO> addProgress(
             @PathVariable UUID id,
             @Valid @RequestBody AddProgressRequestDTO request) {
         
-        log.info("POST /api/support-tickets/{}/progress", id);
+        UserPrincipal currentUser = SecurityUtil.getCurrentUser();
+        UUID userId = UUID.fromString(currentUser.getUserId());
+        String role = currentUser.getRole();
         
-        ProgressResponseDTO progress = supportTicketService.addProgress(id, request);
+        log.info("POST /api/support-tickets/{}/progress - userId={}, role={}", id, userId, role);
+        
+        // Set performedBy to current user
+        request.setPerformedBy(userId);
+        
+        ProgressResponseDTO progress = supportTicketService.addProgressWithPermissionCheck(id, request, userId, role);
         return ResponseEntity.status(HttpStatus.CREATED).body(progress);
     }
     

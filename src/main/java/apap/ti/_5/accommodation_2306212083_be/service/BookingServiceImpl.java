@@ -85,35 +85,17 @@ public class BookingServiceImpl implements BookingService {
             .orElseThrow(() -> new RuntimeException("Booking not found"));
         
         Integer oldStatus = existingBooking.getStatus();
-        Integer oldPrice = existingBooking.getTotalPrice();
-        Integer newPrice = updatedBooking.getTotalPrice();
         
-        // Status 0 (Waiting for Payment) logic
-        if (oldStatus == 0) {
-            if (existingBooking.getExtraPay() > 0) {
-                throw new RuntimeException("Cannot update booking with extra_pay > 0");
-            }
-            existingBooking.setTotalPrice(newPrice);
-            // No income change for status 0
+        // Only allow updates for status 0 (Waiting for Payment)
+        if (oldStatus != 0) {
+            throw new RuntimeException("Can only update bookings with Waiting for Payment status");
         }
         
-        // Status 1 (Payment Confirmed) logic
-        else if (oldStatus == 1) {
-            if (newPrice > oldPrice) {
-                // Price increased → extra_pay
-                existingBooking.setExtraPay(existingBooking.getExtraPay() + (newPrice - oldPrice));
-            } else if (newPrice < oldPrice) {
-                // Price decreased → refund
-                existingBooking.setRefund(existingBooking.getRefund() + (oldPrice - newPrice));
-                existingBooking.setStatus(3); // Change to Request Refund
-            }
-            existingBooking.setTotalPrice(newPrice);
-        }
-        
-        // Update other fields
+        // Update booking details
         existingBooking.setCheckInDate(updatedBooking.getCheckInDate());
         existingBooking.setCheckOutDate(updatedBooking.getCheckOutDate());
         existingBooking.setCapacity(updatedBooking.getCapacity());
+        existingBooking.setTotalPrice(updatedBooking.getTotalPrice());
         
         return bookingRepository.save(existingBooking);
     }
@@ -143,17 +125,9 @@ public class BookingServiceImpl implements BookingService {
         if (oldStatus == 0) {
             // Waiting for Payment → no income impact
             // Do nothing
-        } else if (oldStatus == 1 && booking.getExtraPay() > 0) {
-            // Payment Confirmed with extra_pay
-            int reduction = booking.getTotalPrice() - booking.getExtraPay();
-            propertyService.updatePropertyIncome(propertyId, -reduction);
         } else if (oldStatus == 1) {
-            // Payment Confirmed without extra_pay
+            // Payment Confirmed → reduce property income
             propertyService.updatePropertyIncome(propertyId, -booking.getTotalPrice());
-        } else if (oldStatus == 3) {
-            // Request Refund
-            int reduction = booking.getTotalPrice() + booking.getRefund();
-            propertyService.updatePropertyIncome(propertyId, -reduction);
         }
         
         booking.setStatus(2); // Cancelled
@@ -166,18 +140,7 @@ public class BookingServiceImpl implements BookingService {
         return bookingRepository.save(booking);
     }
 
-    @Override
-    public AccommodationBooking refundBooking(String id) {
-        AccommodationBooking booking = bookingRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Booking not found"));
-        
-        if (booking.getStatus() != 1) {
-            throw new RuntimeException("Can only request refund for Payment Confirmed bookings");
-        }
-        
-        booking.setStatus(3); // Request Refund
-        return bookingRepository.save(booking);
-    }
+
 
     @Override
     public void autoCheckInBookings() {
@@ -185,25 +148,17 @@ public class BookingServiceImpl implements BookingService {
         List<AccommodationBooking> bookingsToCheckIn = bookingRepository.findBookingsToCheckIn(today);
         
         for (AccommodationBooking booking : bookingsToCheckIn) {
-            if (booking.getExtraPay() > 0) {
-                // If extra_pay > 0 → Cancel
-                cancelBooking(booking.getBookingId());
-            } else {
-                // Change to Done
-                booking.setStatus(4);
-                
-                // Update property income
-                String propertyId = booking.getRoom().getRoomType().getProperty().getPropertyId();
-                int incomeAmount = booking.getTotalPrice() - booking.getRefund();
-                propertyService.updatePropertyIncome(propertyId, incomeAmount);
-                
-                // Release room
-                Room room = booking.getRoom();
-                room.setAvailabilityStatus(1);
-                roomRepository.save(room);
-                
-                bookingRepository.save(booking);
-            }
+            // Update property income when booking is completed
+            String propertyId = booking.getRoom().getRoomType().getProperty().getPropertyId();
+            propertyService.updatePropertyIncome(propertyId, booking.getTotalPrice());
+            
+            // Release room
+            Room room = booking.getRoom();
+            room.setAvailabilityStatus(1);
+            roomRepository.save(room);
+            
+            // Keep status as Payment Confirmed (1), don't change to Done
+            bookingRepository.save(booking);
         }
     }
 
@@ -256,6 +211,21 @@ public class BookingServiceImpl implements BookingService {
     
     @Override
     public BookingResponseDTO createBookingWithRoom(String roomId, BookingRequestDTO request) {
+        // Auto-set customerId from authenticated user if not provided
+        if (request.getCustomerId() == null) {
+            var currentUser = apap.ti._5.accommodation_2306212083_be.util.SecurityUtil.getCurrentUser();
+            if (currentUser != null) {
+                request.setCustomerId(UUID.fromString(currentUser.getUserId()));
+                // Also auto-fill customer name and email if not provided
+                if (request.getCustomerName() == null || request.getCustomerName().isEmpty()) {
+                    request.setCustomerName(currentUser.getName());
+                }
+                if (request.getCustomerEmail() == null || request.getCustomerEmail().isEmpty()) {
+                    request.setCustomerEmail(currentUser.getEmail());
+                }
+            }
+        }
+        
         // Ensure customer exists in database
         ensureCustomerExists(request);
         
@@ -302,8 +272,6 @@ public class BookingServiceImpl implements BookingService {
             .customerPhone(request.getCustomerPhone())
             .isBreakfast(request.getAddOnBreakfast())
             .capacity(request.getCapacity())
-            .refund(0)
-            .extraPay(0)
             .createdDate(LocalDateTime.now())
             .updatedDate(LocalDateTime.now())
             .build();
@@ -332,21 +300,9 @@ public class BookingServiceImpl implements BookingService {
         // Update customer data in Customer table
         ensureCustomerExists(request);
         
-        // Status validation based on business rules:
-        // Status 0 (Waiting): can update, diupdate, cancel
-        // Status 1 (Payment Confirmed): can diupdate and cancel (with rules)
-        // Status 2 (Cancelled): cannot update
-        // Status 3 (Request Refund): cannot update
-        // Status 4 (Done): cannot update
-        
+        // Status validation: Only allow updates for status 0 and 1
         if (existing.getStatus() == 2) {
             throw new RuntimeException("Cannot update cancelled booking");
-        }
-        if (existing.getStatus() == 3) {
-            throw new RuntimeException("Cannot update booking with pending refund request");
-        }
-        if (existing.getStatus() == 4) {
-            throw new RuntimeException("Cannot update completed booking");
         }
         
         // Parse dates from String to LocalDateTime
@@ -386,29 +342,10 @@ public class BookingServiceImpl implements BookingService {
         existing.setCustomerPhone(request.getCustomerPhone());
         existing.setUpdatedDate(LocalDateTime.now());
         
-        // Handle price changes based on status
-        if (existing.getStatus() == 0) {
-            // Status 0 (Waiting): Update total price, extra_pay becomes 0 if price increased
-            if (newTotalPrice > oldTotalPrice) {
-                existing.setExtraPay(0); // Will be recalculated on payment
-                existing.setStatus(0); // Keep status as Waiting for Payment
-            }
-            existing.setRefund(0); // No refund for status 0
-        } else if (existing.getStatus() == 1) {
-            // Status 1 (Payment Confirmed): Handle extra_pay or refund
-            if (newTotalPrice > oldTotalPrice) {
-                // Price increased: add to extra_pay, set refund to 0, change to waiting
-                int extraPayment = newTotalPrice - oldTotalPrice;
-                existing.setExtraPay(extraPayment);
-                existing.setRefund(0);
-                existing.setStatus(0); // Change to Waiting for Payment
-            } else if (newTotalPrice < oldTotalPrice) {
-                // Price decreased: add to refund
-                int refundAmount = oldTotalPrice - newTotalPrice;
-                existing.setRefund(refundAmount);
-                existing.setStatus(3); // Change to Request Refund status
-            }
-            // If newTotalPrice == oldTotalPrice, no changes to extra_pay or refund
+        // Price changes only allowed for status 0 (Waiting for Payment)
+        // For status 1 (Payment Confirmed), price is locked
+        if (existing.getStatus() == 1 && newTotalPrice != oldTotalPrice) {
+            throw new RuntimeException("Cannot change price for confirmed bookings");
         }
         
         AccommodationBooking updated = bookingRepository.save(existing);
@@ -444,22 +381,8 @@ public class BookingServiceImpl implements BookingService {
             // Pay full booking - change status from Waiting (0) to Confirmed (1)
             booking.setStatus(1);
             
-            // If there's extra pay, add it to total price and income
-            if (booking.getExtraPay() > 0) {
-                booking.setTotalPrice(booking.getTotalPrice() + booking.getExtraPay());
-                booking.setExtraPay(0);
-            }
-            
             // Update property income/revenue with total price
             propertyService.updatePropertyIncome(propertyId, booking.getTotalPrice());
-            
-        } else if (booking.getExtraPay() > 0) {
-            // Pay extra payment only (booking already confirmed)
-            // Add extra pay to total price
-            booking.setTotalPrice(booking.getTotalPrice() + booking.getExtraPay());
-            // Add extra pay to income
-            propertyService.updatePropertyIncome(propertyId, booking.getExtraPay());
-            booking.setExtraPay(0);
         }
         
         booking.setUpdatedDate(LocalDateTime.now());
@@ -477,32 +400,6 @@ public class BookingServiceImpl implements BookingService {
         bookingRepository.save(booking);
     }
 
-    @Override
-    public void refundBookingById(String id) {
-        AccommodationBooking booking = bookingRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Booking not found"));
-        
-        // Validate status: only process refund if status is 3 (Request Refund)
-        if (booking.getStatus() != 3) {
-            throw new RuntimeException("Booking is not in Request Refund status");
-        }
-        
-        // Process refund: reduce property income by refund amount
-        if (booking.getRefund() > 0) {
-            String propertyId = booking.getRoom().getRoomType().getProperty().getPropertyId();
-            
-            // Reduce property income
-            propertyService.updatePropertyIncome(propertyId, -booking.getRefund());
-            
-            // Change status to 4 (Done/Completed) after refund is processed
-            booking.setStatus(4);
-            booking.setUpdatedDate(LocalDateTime.now());
-            bookingRepository.save(booking);
-        } else {
-            throw new RuntimeException("No refund amount to process");
-        }
-    }
-    
     @Override
     public boolean isRoomAvailableForDates(String roomId, LocalDateTime checkIn, LocalDateTime checkOut) {
         Room room = roomRepository.findById(roomId)
@@ -553,8 +450,6 @@ public class BookingServiceImpl implements BookingService {
             .customerPhone(booking.getCustomerPhone())
             .addOnBreakfast(booking.getIsBreakfast())
             .capacity(booking.getCapacity())
-            .refund(booking.getRefund())
-            .extraPay(booking.getExtraPay())
             .createdDate(booking.getCreatedDate())
             .updatedDate(booking.getUpdatedDate())
             .build();
@@ -574,8 +469,8 @@ public class BookingServiceImpl implements BookingService {
         // Skip cancelled (2), refund (3), and done (4)
         List<AccommodationBooking> roomBookings = bookingRepository.findByRoom_RoomId(room.getRoomId());
         for (AccommodationBooking booking : roomBookings) {
-            // Skip cancelled, refund, done bookings, and inactive bookings
-            if (booking.getActiveStatus() == 0 || booking.getStatus() == 2 || booking.getStatus() == 3 || booking.getStatus() == 4) {
+            // Skip cancelled bookings and inactive bookings
+            if (booking.getActiveStatus() == 0 || booking.getStatus() == 2) {
                 continue;
             }
             

@@ -24,6 +24,11 @@ public interface AccommodationReviewService {
     List<ReviewResponseDTO> getReviewsByCustomer(UUID customerId);
 
     /**
+     * Get reviews for properties owned by this accommodation owner
+     */
+    List<ReviewResponseDTO> getReviewsForOwnerProperties(UUID ownerId);
+
+    /**
      * Get review detail by ID
      */
     ReviewResponseDTO getReviewDetail(UUID reviewId);

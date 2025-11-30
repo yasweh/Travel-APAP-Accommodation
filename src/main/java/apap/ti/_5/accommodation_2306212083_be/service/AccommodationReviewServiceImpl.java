@@ -63,6 +63,27 @@ public class AccommodationReviewServiceImpl implements AccommodationReviewServic
 
     @Override
     @Transactional(readOnly = true)
+    public List<ReviewResponseDTO> getReviewsForOwnerProperties(UUID ownerId) {
+        log.info("Fetching reviews for properties owned by: {}", ownerId);
+        
+        // Get all active properties owned by this owner
+        List<Property> properties = propertyRepository.findByOwnerIdAndActiveStatus(ownerId, 1);
+        List<String> propertyIds = properties.stream()
+                .map(Property::getPropertyId)
+                .collect(Collectors.toList());
+        
+        // Get all reviews for these properties
+        List<AccommodationReview> reviews = reviewRepository.findAllActiveReviews().stream()
+                .filter(review -> propertyIds.contains(review.getPropertyId()))
+                .collect(Collectors.toList());
+        
+        return reviews.stream()
+                .map(this::mapToResponseDTO)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public ReviewResponseDTO getReviewDetail(UUID reviewId) {
         log.info("Fetching review detail for: {}", reviewId);
         

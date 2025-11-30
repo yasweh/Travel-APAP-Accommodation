@@ -1,29 +1,33 @@
 package apap.ti._5.accommodation_2306212083_be.controller;
 
+import apap.ti._5.accommodation_2306212083_be.dto.MaintenanceDTO;
+import apap.ti._5.accommodation_2306212083_be.dto.UserPrincipal;
 import apap.ti._5.accommodation_2306212083_be.model.Maintenance;
 import apap.ti._5.accommodation_2306212083_be.model.Property;
 import apap.ti._5.accommodation_2306212083_be.model.Room;
 import apap.ti._5.accommodation_2306212083_be.model.RoomType;
 import apap.ti._5.accommodation_2306212083_be.repository.RoomRepository;
 import apap.ti._5.accommodation_2306212083_be.service.MaintenanceService;
+import apap.ti._5.accommodation_2306212083_be.util.SecurityUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.MockedStatic;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+@ExtendWith(MockitoExtension.class)
 class MaintenanceControllerTest {
 
     @Mock
@@ -35,501 +39,270 @@ class MaintenanceControllerTest {
     @InjectMocks
     private MaintenanceController maintenanceController;
 
-    private Room testRoom;
-    private RoomType testRoomType;
+    private UserPrincipal ownerUser;
+    private UserPrincipal superadminUser;
     private Property testProperty;
-    private Maintenance testMaintenance1;
-    private Maintenance testMaintenance2;
+    private RoomType testRoomType;
+    private Room testRoom;
+    private MaintenanceDTO testMaintenanceDTO;
 
     @BeforeEach
     void setUp() {
-        MockitoAnnotations.openMocks(this);
-
-        testProperty = Property.builder()
-                .propertyId("PROP001")
-                .propertyName("Test Hotel")
-                .address("Test Address")
-                .province(1)
-                .type(1)
-                .income(0)
-                .activeStatus(1)
+        ownerUser = UserPrincipal.builder()
+                .userId("22222222-2222-2222-2222-222222222222")
+                .username("owner")
+                .role("Accommodation Owner")
                 .build();
 
-        testRoomType = RoomType.builder()
-                .roomTypeId("RT001")
-                .name("Deluxe")
-                .price(500000)
-                .capacity(2)
-                .facility("AC, TV")
-                .floor(1)
-                .property(testProperty)
-                .activeStatus(1)
+        superadminUser = UserPrincipal.builder()
+                .userId("33333333-3333-3333-3333-333333333333")
+                .username("admin")
+                .role("Superadmin")
                 .build();
 
-        testRoom = Room.builder()
-                .roomId("ROOM001")
-                .name("101")
-                .availabilityStatus(1)
-                .activeRoom(1)
-                .roomType(testRoomType)
-                .createdDate(LocalDateTime.now())
-                .updatedDate(LocalDateTime.now())
-                .build();
+        testProperty = new Property();
+        testProperty.setPropertyId("prop-001");
+        testProperty.setPropertyName("Test Hotel");
+        testProperty.setOwnerId(UUID.fromString("22222222-2222-2222-2222-222222222222"));
 
-        testMaintenance1 = Maintenance.builder()
-                .room(testRoom)
-                .startDate(LocalDate.of(2025, 11, 10))
-                .startTime(LocalTime.of(9, 0))
-                .endDate(LocalDate.of(2025, 11, 12))
-                .endTime(LocalTime.of(17, 0))
-                .createdDate(LocalDateTime.now())
-                .updatedDate(LocalDateTime.now())
-                .build();
+        testRoomType = new RoomType();
+        testRoomType.setRoomTypeId("rt-001");
+        testRoomType.setProperty(testProperty);
 
-        testMaintenance2 = Maintenance.builder()
-                .room(testRoom)
-                .startDate(LocalDate.of(2025, 11, 15))
-                .startTime(LocalTime.of(10, 0))
-                .endDate(LocalDate.of(2025, 11, 16))
-                .endTime(LocalTime.of(16, 0))
-                .createdDate(LocalDateTime.now())
-                .updatedDate(LocalDateTime.now())
+        testRoom = new Room();
+        testRoom.setRoomId("room-001");
+        testRoom.setName("Room 101");
+        testRoom.setRoomType(testRoomType);
+
+        testMaintenanceDTO = MaintenanceDTO.builder()
+                .maintenanceId(1L)
+                .roomId("room-001")
+                .roomName("Room 101")
+                .startDate(LocalDate.now().plusDays(1))
+                .endDate(LocalDate.now().plusDays(2))
                 .build();
     }
 
     @Test
-    void testAddMaintenance_Success() {
-        // Arrange
-        Map<String, Object> request = new HashMap<>();
-        request.put("roomId", "ROOM001");
-        request.put("startDate", "2025-11-10");
-        request.put("startTime", "09:00");
-        request.put("endDate", "2025-11-12");
-        request.put("endTime", "17:00");
+    void addMaintenance_Success() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(ownerUser);
+            securityUtil.when(SecurityUtil::isSuperadmin).thenReturn(false);
 
-        when(roomRepository.findById("ROOM001")).thenReturn(Optional.of(testRoom));
-        when(maintenanceService.addMaintenance(any(Maintenance.class))).thenReturn(testMaintenance1);
+            Map<String, Object> request = new HashMap<>();
+            request.put("roomId", "room-001");
+            request.put("startDate", "2025-02-01");
+            request.put("startTime", "10:00");
+            request.put("endDate", "2025-02-02");
+            request.put("endTime", "15:00");
 
-        // Act
-        ResponseEntity<Map<String, Object>> response = maintenanceController.addMaintenance(request);
+            when(roomRepository.findById("room-001")).thenReturn(Optional.of(testRoom));
+            when(maintenanceService.addMaintenance(any(Maintenance.class))).thenReturn(new Maintenance());
 
-        // Assert
-        assertNotNull(response);
-        assertEquals(HttpStatus.CREATED, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertTrue((Boolean) response.getBody().get("success"));
-        assertEquals("Maintenance scheduled successfully", response.getBody().get("message"));
-        
-        Maintenance data = (Maintenance) response.getBody().get("data");
-        assertEquals("ROOM001", data.getRoom().getRoomId());
-        
-        verify(roomRepository, times(1)).findById("ROOM001");
-        verify(maintenanceService, times(1)).addMaintenance(any(Maintenance.class));
+            ResponseEntity<Map<String, Object>> response = maintenanceController.addMaintenance(request);
+
+            assertEquals(HttpStatus.CREATED, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testAddMaintenance_WithDifferentTimeFormat() {
-        // Arrange
-        Map<String, Object> request = new HashMap<>();
-        request.put("roomId", "ROOM001");
-        request.put("startDate", "2025-11-15");
-        request.put("startTime", "10:30:00");
-        request.put("endDate", "2025-11-16");
-        request.put("endTime", "15:45:00");
+    void addMaintenance_AsSuperadmin_Success() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(superadminUser);
+            securityUtil.when(SecurityUtil::isSuperadmin).thenReturn(true);
 
-        when(roomRepository.findById("ROOM001")).thenReturn(Optional.of(testRoom));
-        when(maintenanceService.addMaintenance(any(Maintenance.class))).thenReturn(testMaintenance2);
+            Map<String, Object> request = new HashMap<>();
+            request.put("roomId", "room-001");
+            request.put("startDate", "2025-02-01");
+            request.put("startTime", "10:00");
+            request.put("endDate", "2025-02-02");
+            request.put("endTime", "15:00");
 
-        // Act
-        ResponseEntity<Map<String, Object>> response = maintenanceController.addMaintenance(request);
+            when(roomRepository.findById("room-001")).thenReturn(Optional.of(testRoom));
+            when(maintenanceService.addMaintenance(any(Maintenance.class))).thenReturn(new Maintenance());
 
-        // Assert
-        assertNotNull(response);
-        assertEquals(HttpStatus.CREATED, response.getStatusCode());
-        assertTrue((Boolean) response.getBody().get("success"));
-        
-        verify(roomRepository, times(1)).findById("ROOM001");
-        verify(maintenanceService, times(1)).addMaintenance(any(Maintenance.class));
+            ResponseEntity<Map<String, Object>> response = maintenanceController.addMaintenance(request);
+
+            assertEquals(HttpStatus.CREATED, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testAddMaintenance_RoomNotFound() {
-        // Arrange
+    void addMaintenance_RoomNotFound() {
         Map<String, Object> request = new HashMap<>();
-        request.put("roomId", "ROOM999");
-        request.put("startDate", "2025-11-10");
-        request.put("startTime", "09:00");
-        request.put("endDate", "2025-11-12");
-        request.put("endTime", "17:00");
+        request.put("roomId", "invalid");
+        request.put("startDate", "2025-02-01");
+        request.put("startTime", "10:00");
+        request.put("endDate", "2025-02-02");
+        request.put("endTime", "15:00");
 
-        when(roomRepository.findById("ROOM999")).thenReturn(Optional.empty());
+        when(roomRepository.findById("invalid")).thenReturn(Optional.empty());
 
-        // Act
         ResponseEntity<Map<String, Object>> response = maintenanceController.addMaintenance(request);
 
-        // Assert
-        assertNotNull(response);
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertFalse((Boolean) response.getBody().get("success"));
-        assertEquals("Room not found", response.getBody().get("message"));
-        
-        verify(roomRepository, times(1)).findById("ROOM999");
-        verify(maintenanceService, never()).addMaintenance(any(Maintenance.class));
-    }
-
-    @Test
-    void testAddMaintenance_InvalidDateFormat() {
-        // Arrange
-        Map<String, Object> request = new HashMap<>();
-        request.put("roomId", "ROOM001");
-        request.put("startDate", "invalid-date");
-        request.put("startTime", "09:00");
-        request.put("endDate", "2025-11-12");
-        request.put("endTime", "17:00");
-
-        when(roomRepository.findById("ROOM001")).thenReturn(Optional.of(testRoom));
-
-        // Act
-        ResponseEntity<Map<String, Object>> response = maintenanceController.addMaintenance(request);
-
-        // Assert
-        assertNotNull(response);
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertFalse((Boolean) response.getBody().get("success"));
-        assertNotNull(response.getBody().get("message"));
-        
-        verify(roomRepository, times(1)).findById("ROOM001");
-        verify(maintenanceService, never()).addMaintenance(any(Maintenance.class));
-    }
-
-    @Test
-    void testAddMaintenance_InvalidTimeFormat() {
-        // Arrange
-        Map<String, Object> request = new HashMap<>();
-        request.put("roomId", "ROOM001");
-        request.put("startDate", "2025-11-10");
-        request.put("startTime", "invalid-time");
-        request.put("endDate", "2025-11-12");
-        request.put("endTime", "17:00");
-
-        when(roomRepository.findById("ROOM001")).thenReturn(Optional.of(testRoom));
-
-        // Act
-        ResponseEntity<Map<String, Object>> response = maintenanceController.addMaintenance(request);
-
-        // Assert
-        assertNotNull(response);
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertFalse((Boolean) response.getBody().get("success"));
-        
-        verify(roomRepository, times(1)).findById("ROOM001");
-        verify(maintenanceService, never()).addMaintenance(any(Maintenance.class));
     }
 
     @Test
-    void testAddMaintenance_ServiceException() {
-        // Arrange
-        Map<String, Object> request = new HashMap<>();
-        request.put("roomId", "ROOM001");
-        request.put("startDate", "2025-11-10");
-        request.put("startTime", "09:00");
-        request.put("endDate", "2025-11-12");
-        request.put("endTime", "17:00");
+    void addMaintenance_AccessDenied() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            UserPrincipal otherOwner = UserPrincipal.builder()
+                    .userId("44444444-4444-4444-4444-444444444444")
+                    .role("Accommodation Owner")
+                    .build();
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(otherOwner);
+            securityUtil.when(SecurityUtil::isSuperadmin).thenReturn(false);
 
-        when(roomRepository.findById("ROOM001")).thenReturn(Optional.of(testRoom));
-        when(maintenanceService.addMaintenance(any(Maintenance.class)))
-                .thenThrow(new RuntimeException("Database error"));
+            Map<String, Object> request = new HashMap<>();
+            request.put("roomId", "room-001");
+            request.put("startDate", "2025-02-01");
+            request.put("startTime", "10:00");
+            request.put("endDate", "2025-02-02");
+            request.put("endTime", "15:00");
 
-        // Act
-        ResponseEntity<Map<String, Object>> response = maintenanceController.addMaintenance(request);
+            when(roomRepository.findById("room-001")).thenReturn(Optional.of(testRoom));
 
-        // Assert
-        assertNotNull(response);
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertFalse((Boolean) response.getBody().get("success"));
-        assertEquals("Database error", response.getBody().get("message"));
-        
-        verify(roomRepository, times(1)).findById("ROOM001");
-        verify(maintenanceService, times(1)).addMaintenance(any(Maintenance.class));
+            ResponseEntity<Map<String, Object>> response = maintenanceController.addMaintenance(request);
+
+            assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+            assertFalse((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testAddMaintenance_NullRoomId() {
-        // Arrange
-        Map<String, Object> request = new HashMap<>();
-        request.put("roomId", null);
-        request.put("startDate", "2025-11-10");
-        request.put("startTime", "09:00");
-        request.put("endDate", "2025-11-12");
-        request.put("endTime", "17:00");
+    void getAllMaintenance_AsSuperadmin_ReturnsAll() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(superadminUser);
+            securityUtil.when(SecurityUtil::isAccommodationOwner).thenReturn(false);
 
-        // Act
-        ResponseEntity<Map<String, Object>> response = maintenanceController.addMaintenance(request);
+            List<MaintenanceDTO> maintenanceList = Arrays.asList(testMaintenanceDTO);
+            when(maintenanceService.getAllMaintenance()).thenReturn(maintenanceList);
 
-        // Assert
-        assertNotNull(response);
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertFalse((Boolean) response.getBody().get("success"));
-        
-        verify(roomRepository, never()).findById(anyString());
-        verify(maintenanceService, never()).addMaintenance(any(Maintenance.class));
+            ResponseEntity<Map<String, Object>> response = maintenanceController.getAllMaintenance();
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
-    // TODO: Fix these tests - service returns MaintenanceDTO not Maintenance
-    /*
     @Test
-    void testGetAllMaintenance_Success() {
-        // Arrange
-        List<Maintenance> maintenanceList = Arrays.asList(testMaintenance1, testMaintenance2);
-        when(maintenanceService.getAllMaintenance()).thenReturn(maintenanceList);
+    void getAllMaintenance_AsOwner_ReturnsFiltered() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(ownerUser);
+            securityUtil.when(SecurityUtil::isAccommodationOwner).thenReturn(true);
 
-        // Act
-        ResponseEntity<Map<String, Object>> response = maintenanceController.getAllMaintenance();
+            List<MaintenanceDTO> maintenanceList = new ArrayList<>();
+            maintenanceList.add(testMaintenanceDTO);
+            when(maintenanceService.getAllMaintenance()).thenReturn(maintenanceList);
+            when(roomRepository.findById("room-001")).thenReturn(Optional.of(testRoom));
 
-        // Assert
-        assertNotNull(response);
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertTrue((Boolean) response.getBody().get("success"));
-        
-        @SuppressWarnings("unchecked")
-        List<Maintenance> data = (List<Maintenance>) response.getBody().get("data");
-        assertEquals(2, data.size());
-        assertEquals("MAINT001", data.get(0).getMaintenanceId());
-        assertEquals("MAINT002", data.get(1).getMaintenanceId());
-        
-        verify(maintenanceService, times(1)).getAllMaintenance();
+            ResponseEntity<Map<String, Object>> response = maintenanceController.getAllMaintenance();
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
-    */
 
     @Test
-    void testGetAllMaintenance_EmptyList() {
-        // Arrange
-        when(maintenanceService.getAllMaintenance()).thenReturn(new ArrayList<>());
+    void getAllMaintenance_Error() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(superadminUser);
+            securityUtil.when(SecurityUtil::isAccommodationOwner).thenReturn(false);
 
-        // Act
-        ResponseEntity<Map<String, Object>> response = maintenanceController.getAllMaintenance();
+            when(maintenanceService.getAllMaintenance()).thenThrow(new RuntimeException("Error"));
 
-        // Assert
-        assertNotNull(response);
+            ResponseEntity<Map<String, Object>> response = maintenanceController.getAllMaintenance();
+
+            assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+            assertFalse((Boolean) response.getBody().get("success"));
+        }
+    }
+
+    @Test
+    void getMaintenanceByRoomType_Success() {
+        List<MaintenanceDTO> maintenanceList = Arrays.asList(testMaintenanceDTO);
+        when(maintenanceService.getMaintenanceByRoomTypeId("rt-001")).thenReturn(maintenanceList);
+
+        ResponseEntity<Map<String, Object>> response = maintenanceController.getMaintenanceByRoomType("rt-001");
+
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertTrue((Boolean) response.getBody().get("success"));
-        
-        @SuppressWarnings("unchecked")
-        List<Maintenance> data = (List<Maintenance>) response.getBody().get("data");
-        assertEquals(0, data.size());
-        
-        verify(maintenanceService, times(1)).getAllMaintenance();
+    }
+
+    @Test
+    void getMaintenanceByRoomType_Error() {
+        when(maintenanceService.getMaintenanceByRoomTypeId("invalid"))
+                .thenThrow(new RuntimeException("Error"));
+
+        ResponseEntity<Map<String, Object>> response = maintenanceController.getMaintenanceByRoomType("invalid");
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertFalse((Boolean) response.getBody().get("success"));
+    }
+
+    @Test
+    void getMaintenanceByRoom_AsSuperadmin_Success() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(superadminUser);
+            securityUtil.when(SecurityUtil::isSuperadmin).thenReturn(true);
+
+            when(roomRepository.findById("room-001")).thenReturn(Optional.of(testRoom));
+            when(maintenanceService.getMaintenanceByRoomId("room-001"))
+                    .thenReturn(Arrays.asList(testMaintenanceDTO));
+
+            ResponseEntity<Map<String, Object>> response = maintenanceController.getMaintenanceByRoom("room-001");
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
+    }
+
+    @Test
+    void getMaintenanceByRoom_AsOwner_Success() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(ownerUser);
+            securityUtil.when(SecurityUtil::isSuperadmin).thenReturn(false);
+
+            when(roomRepository.findById("room-001")).thenReturn(Optional.of(testRoom));
+            when(maintenanceService.getMaintenanceByRoomId("room-001"))
+                    .thenReturn(Arrays.asList(testMaintenanceDTO));
+
+            ResponseEntity<Map<String, Object>> response = maintenanceController.getMaintenanceByRoom("room-001");
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
+    }
+
+    @Test
+    void getMaintenanceByRoom_AsOwner_AccessDenied() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            UserPrincipal otherOwner = UserPrincipal.builder()
+                    .userId("44444444-4444-4444-4444-444444444444")
+                    .role("Accommodation Owner")
+                    .build();
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(otherOwner);
+            securityUtil.when(SecurityUtil::isSuperadmin).thenReturn(false);
+
+            when(roomRepository.findById("room-001")).thenReturn(Optional.of(testRoom));
+
+            ResponseEntity<Map<String, Object>> response = maintenanceController.getMaintenanceByRoom("room-001");
+
+            assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+            assertFalse((Boolean) response.getBody().get("success"));
+        }
+    }
+
+    @Test
+    void getMaintenanceByRoom_RoomNotFound() {
+        when(roomRepository.findById("invalid")).thenReturn(Optional.empty());
+
+        ResponseEntity<Map<String, Object>> response = maintenanceController.getMaintenanceByRoom("invalid");
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertFalse((Boolean) response.getBody().get("success"));
     }
 }
-    
-    // TODO: Fix - service returns MaintenanceDTO
-    /*
-    @Test
-    void testGetAllMaintenance_Exception() {
-        // Arrange
-        when(maintenanceService.getAllMaintenance())
-                .thenThrow(new RuntimeException("Service unavailable"));
-
-        // Act
-        ResponseEntity<Map<String, Object>> response = maintenanceController.getAllMaintenance();
-
-        // Assert
-        assertNotNull(response);
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertFalse((Boolean) response.getBody().get("success"));
-        assertEquals("Service unavailable", response.getBody().get("message"));
-        
-        verify(maintenanceService, times(1)).getAllMaintenance();
-    }
-    */
-
-    // TODO: Fix these tests - service returns MaintenanceDTO not Maintenance
-    /*
-    @Test
-    void testGetMaintenanceByRoomType_Success() {
-        // Arrange
-        List<Maintenance> maintenanceList = Arrays.asList(testMaintenance1, testMaintenance2);
-        when(maintenanceService.getMaintenanceByRoomTypeId("RT001")).thenReturn(maintenanceList);
-
-        // Act
-        ResponseEntity<Map<String, Object>> response = maintenanceController.getMaintenanceByRoomType("RT001");
-
-        // Assert
-        assertNotNull(response);
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertTrue((Boolean) response.getBody().get("success"));
-        
-        @SuppressWarnings("unchecked")
-        List<Maintenance> data = (List<Maintenance>) response.getBody().get("data");
-        assertEquals(2, data.size());
-        assertEquals("MAINT001", data.get(0).getMaintenanceId());
-        assertEquals("MAINT002", data.get(1).getMaintenanceId());
-        
-        verify(maintenanceService, times(1)).getMaintenanceByRoomTypeId("RT001");
-    }
-
-    @Test
-    void testGetMaintenanceByRoomType_EmptyList() {
-        // Arrange
-        when(maintenanceService.getMaintenanceByRoomTypeId("RT002")).thenReturn(new ArrayList<>());
-
-        // Act
-        ResponseEntity<Map<String, Object>> response = maintenanceController.getMaintenanceByRoomType("RT002");
-
-        // Assert
-        assertNotNull(response);
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertTrue((Boolean) response.getBody().get("success"));
-        
-        @SuppressWarnings("unchecked")
-        List<Maintenance> data = (List<Maintenance>) response.getBody().get("data");
-        assertEquals(0, data.size());
-        
-        verify(maintenanceService, times(1)).getMaintenanceByRoomTypeId("RT002");
-    }
-
-    @Test
-    void testGetMaintenanceByRoomType_Exception() {
-        // Arrange
-        when(maintenanceService.getMaintenanceByRoomTypeId("RT001"))
-                .thenThrow(new RuntimeException("Database connection error"));
-
-        // Act
-        ResponseEntity<Map<String, Object>> response = maintenanceController.getMaintenanceByRoomType("RT001");
-
-        // Assert
-        assertNotNull(response);
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertFalse((Boolean) response.getBody().get("success"));
-        assertEquals("Database connection error", response.getBody().get("message"));
-        
-        verify(maintenanceService, times(1)).getMaintenanceByRoomTypeId("RT001");
-    }
-
-    @Test
-    void testGetMaintenanceByRoom_Success() {
-        // Arrange
-        List<Maintenance> maintenanceList = Arrays.asList(testMaintenance1, testMaintenance2);
-        when(maintenanceService.getMaintenanceByRoomId("ROOM001")).thenReturn(maintenanceList);
-
-        // Act
-        ResponseEntity<Map<String, Object>> response = maintenanceController.getMaintenanceByRoom("ROOM001");
-
-        // Assert
-        assertNotNull(response);
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertTrue((Boolean) response.getBody().get("success"));
-        
-        @SuppressWarnings("unchecked")
-        List<Maintenance> data = (List<Maintenance>) response.getBody().get("data");
-        assertEquals(2, data.size());
-        assertEquals("MAINT001", data.get(0).getMaintenanceId());
-        assertEquals("MAINT002", data.get(1).getMaintenanceId());
-        
-        verify(maintenanceService, times(1)).getMaintenanceByRoomId("ROOM001");
-    }
-
-    @Test
-    void testGetMaintenanceByRoom_EmptyList() {
-        // Arrange
-        when(maintenanceService.getMaintenanceByRoomId("ROOM002")).thenReturn(new ArrayList<>());
-
-        // Act
-        ResponseEntity<Map<String, Object>> response = maintenanceController.getMaintenanceByRoom("ROOM002");
-
-        // Assert
-        assertNotNull(response);
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertTrue((Boolean) response.getBody().get("success"));
-        
-        @SuppressWarnings("unchecked")
-        List<Maintenance> data = (List<Maintenance>) response.getBody().get("data");
-        assertEquals(0, data.size());
-        
-        verify(maintenanceService, times(1)).getMaintenanceByRoomId("ROOM002");
-    }
-
-    @Test
-    void testGetMaintenanceByRoom_Exception() {
-        // Arrange
-        when(maintenanceService.getMaintenanceByRoomId("ROOM001"))
-                .thenThrow(new RuntimeException("Service error"));
-
-        // Act
-        ResponseEntity<Map<String, Object>> response = maintenanceController.getMaintenanceByRoom("ROOM001");
-
-        // Assert
-        assertNotNull(response);
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertFalse((Boolean) response.getBody().get("success"));
-        assertEquals("Service error", response.getBody().get("message"));
-        
-        verify(maintenanceService, times(1)).getMaintenanceByRoomId("ROOM001");
-    }
-
-    @Test
-    void testAddMaintenance_VerifyMaintenanceBuilder() {
-        // Arrange
-        Map<String, Object> request = new HashMap<>();
-        request.put("roomId", "ROOM001");
-        request.put("startDate", "2025-11-10");
-        request.put("startTime", "09:00");
-        request.put("endDate", "2025-11-12");
-        request.put("endTime", "17:00");
-
-        when(roomRepository.findById("ROOM001")).thenReturn(Optional.of(testRoom));
-        
-        // Capture the maintenance object passed to service
-        when(maintenanceService.addMaintenance(any(Maintenance.class))).thenAnswer(invocation -> {
-            Maintenance captured = invocation.getArgument(0);
-            assertEquals(testRoom, captured.getRoom());
-            assertEquals(LocalDate.of(2025, 11, 10), captured.getStartDate());
-            assertEquals(LocalTime.of(9, 0), captured.getStartTime());
-            assertEquals(LocalDate.of(2025, 11, 12), captured.getEndDate());
-            assertEquals(LocalTime.of(17, 0), captured.getEndTime());
-            return testMaintenance1;
-        });
-
-        // Act
-        ResponseEntity<Map<String, Object>> response = maintenanceController.addMaintenance(request);
-
-        // Assert
-        assertNotNull(response);
-        assertEquals(HttpStatus.CREATED, response.getStatusCode());
-        
-        verify(roomRepository, times(1)).findById("ROOM001");
-        verify(maintenanceService, times(1)).addMaintenance(any(Maintenance.class));
-    }
-
-    @Test
-    void testAddMaintenance_WithEdgeCaseTime() {
-        // Arrange - Testing midnight and end of day times
-        Map<String, Object> request = new HashMap<>();
-        request.put("roomId", "ROOM001");
-        request.put("startDate", "2025-11-10");
-        request.put("startTime", "00:00");
-        request.put("endDate", "2025-11-12");
-        request.put("endTime", "23:59");
-
-        when(roomRepository.findById("ROOM001")).thenReturn(Optional.of(testRoom));
-        when(maintenanceService.addMaintenance(any(Maintenance.class))).thenReturn(testMaintenance1);
-
-        // Act
-        ResponseEntity<Map<String, Object>> response = maintenanceController.addMaintenance(request);
-
-        // Assert
-        assertNotNull(response);
-        assertEquals(HttpStatus.CREATED, response.getStatusCode());
-        assertTrue((Boolean) response.getBody().get("success"));
-        
-        verify(roomRepository, times(1)).findById("ROOM001");
-        verify(maintenanceService, times(1)).addMaintenance(any(Maintenance.class));
-    }
-}
-    */

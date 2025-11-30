@@ -3,6 +3,7 @@ package apap.ti._5.accommodation_2306212083_be.dto.support;
 import apap.ti._5.accommodation_2306212083_be.enums.ServiceSource;
 import apap.ti._5.accommodation_2306212083_be.enums.TicketStatus;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -14,6 +15,7 @@ import java.util.UUID;
  * Response DTO for detailed ticket view (includes messages, progress, and external booking data)
  */
 @Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class TicketDetailResponseDTO {

@@ -149,14 +149,13 @@ public class ExternalBookingService {
         AccommodationBookingDTO dto = new AccommodationBookingDTO();
         dto.setBookingId(booking.getBookingId());
         dto.setUserId(booking.getCustomerId());
+        dto.setCustomerId(booking.getCustomerId());
         dto.setCheckInDate(booking.getCheckInDate());
         dto.setCheckOutDate(booking.getCheckOutDate());
         dto.setTotalDays(booking.getTotalDays());
         dto.setTotalPrice(booking.getTotalPrice());
-        dto.setStatus(booking.getStatus()); // Integer status: 0=WAITING, 1=CONFIRMED, 2=CANCELLED, 3=DONE
+        dto.setStatus(booking.getStatus()); // Integer status: 0=WAITING, 1=CONFIRMED, 2=CANCELLED
         dto.setIsBreakfast(booking.getIsBreakfast());
-        dto.setRefund(booking.getRefund());
-        dto.setExtraPay(booking.getExtraPay());
         dto.setGuests(booking.getCapacity());
         dto.setCreatedDate(booking.getCreatedDate());
         dto.setUpdatedDate(booking.getUpdatedDate());
@@ -381,7 +380,7 @@ public class ExternalBookingService {
             switch (serviceSource) {
                 case ACCOMMODATION:
                     AccommodationBookingDTO accBooking = (AccommodationBookingDTO) booking;
-                    return accBooking.getUserId() != null && accBooking.getUserId().equals(userId);
+                    return accBooking.getCustomerId() != null && accBooking.getCustomerId().equals(userId);
                     
                 case INSURANCE:
                     InsurancePolicyDTO policy = (InsurancePolicyDTO) booking;

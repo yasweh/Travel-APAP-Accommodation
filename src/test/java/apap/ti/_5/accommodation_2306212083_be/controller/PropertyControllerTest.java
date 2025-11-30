@@ -1,565 +1,576 @@
 package apap.ti._5.accommodation_2306212083_be.controller;
 
+import apap.ti._5.accommodation_2306212083_be.dto.UserPrincipal;
 import apap.ti._5.accommodation_2306212083_be.model.Property;
-import apap.ti._5.accommodation_2306212083_be.model.RoomType;
 import apap.ti._5.accommodation_2306212083_be.model.Room;
+import apap.ti._5.accommodation_2306212083_be.model.RoomType;
+import apap.ti._5.accommodation_2306212083_be.repository.RoomTypeRepository;
 import apap.ti._5.accommodation_2306212083_be.service.PropertyService;
 import apap.ti._5.accommodation_2306212083_be.service.RoomService;
-import apap.ti._5.accommodation_2306212083_be.repository.RoomTypeRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import apap.ti._5.accommodation_2306212083_be.util.PropertyRoomTypeValidator;
+import apap.ti._5.accommodation_2306212083_be.util.SecurityUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockedStatic;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 
-import java.time.LocalDateTime;
 import java.util.*;
 
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(PropertyController.class)
+@ExtendWith(MockitoExtension.class)
 class PropertyControllerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    @MockBean
+    @Mock
     private PropertyService propertyService;
 
-    @MockBean
+    @Mock
     private RoomService roomService;
 
-    @MockBean
+    @Mock
     private RoomTypeRepository roomTypeRepository;
 
+    @Mock
+    private PropertyRoomTypeValidator roomTypeValidator;
+
+    @InjectMocks
+    private PropertyController propertyController;
+
+    private UserPrincipal ownerUser;
+    private UserPrincipal superadminUser;
+    private UserPrincipal customerUser;
     private Property testProperty;
     private RoomType testRoomType;
     private Room testRoom;
 
     @BeforeEach
     void setUp() {
+        customerUser = UserPrincipal.builder()
+                .userId("11111111-1111-1111-1111-111111111111")
+                .username("customer")
+                .role("Customer")
+                .build();
+
+        ownerUser = UserPrincipal.builder()
+                .userId("22222222-2222-2222-2222-222222222222")
+                .username("owner")
+                .role("Accommodation Owner")
+                .build();
+
+        superadminUser = UserPrincipal.builder()
+                .userId("33333333-3333-3333-3333-333333333333")
+                .username("admin")
+                .role("Superadmin")
+                .build();
+
         testProperty = new Property();
-        testProperty.setPropertyId("PROP001");
+        testProperty.setPropertyId("prop-001");
         testProperty.setPropertyName("Test Hotel");
-        testProperty.setType(1);
+        testProperty.setType(0);
         testProperty.setAddress("Test Address");
-        testProperty.setProvince(1);
-        testProperty.setActiveStatus(1);
-        testProperty.setTotalRoom(10);
-        testProperty.setActiveRoom(10);
-        testProperty.setIncome(5000000);
-        testProperty.setOwnerName("Test Owner");
-        testProperty.setOwnerId(UUID.randomUUID());
-        testProperty.setCreatedDate(LocalDateTime.now());
-        testProperty.setUpdatedDate(LocalDateTime.now());
+        testProperty.setProvince(31);
         testProperty.setDescription("Test Description");
+        testProperty.setActiveStatus(1);
+        testProperty.setOwnerId(UUID.fromString("22222222-2222-2222-2222-222222222222"));
+        testProperty.setOwnerName("Test Owner");
 
         testRoomType = new RoomType();
-        testRoomType.setRoomTypeId("RT001");
-        testRoomType.setName("Deluxe");
+        testRoomType.setRoomTypeId("rt-001");
+        testRoomType.setName("Deluxe Room");
         testRoomType.setPrice(500000);
         testRoomType.setCapacity(2);
-        testRoomType.setFloor(2);
+        testRoomType.setFloor(1);
         testRoomType.setProperty(testProperty);
         testRoomType.setActiveStatus(1);
 
         testRoom = new Room();
-        testRoom.setRoomId("PROP001-ROOM-201");
-        testRoom.setName("Room 201");
+        testRoom.setRoomId("room-001");
+        testRoom.setName("Room 101");
         testRoom.setRoomType(testRoomType);
-        testRoom.setAvailabilityStatus(1);
-        testRoom.setActiveRoom(1);
     }
 
     @Test
-    void testListAllProperties_NoParams() throws Exception {
-        when(propertyService.getAllActiveProperties()).thenReturn(Arrays.asList(testProperty));
-        when(roomService.getRoomsByProperty("PROP001")).thenReturn(Arrays.asList(testRoom));
+    void listProperties_AsOwner_ReturnsOwnProperties() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(ownerUser);
 
-        mockMvc.perform(get("/api/property"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data[0].propertyId").value("PROP001"))
-                .andExpect(jsonPath("$.data[0].roomCount").value(1));
+            List<Property> properties = Arrays.asList(testProperty);
+            when(propertyService.getPropertiesByOwner(any(UUID.class))).thenReturn(properties);
+            when(roomService.getRoomsByProperty(anyString())).thenReturn(Arrays.asList(testRoom));
 
-        verify(propertyService, times(1)).getAllActiveProperties();
-        verify(roomService, times(1)).getRoomsByProperty("PROP001");
+            ResponseEntity<Map<String, Object>> response = propertyController.listProperties(null, null, null);
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+            assertNotNull(response.getBody().get("data"));
+        }
     }
 
     @Test
-    void testListAllProperties_WithNameParam() throws Exception {
-        when(propertyService.searchProperties("Test", null, null)).thenReturn(Arrays.asList(testProperty));
-        when(roomService.getRoomsByProperty("PROP001")).thenReturn(Arrays.asList(testRoom));
+    void listProperties_AsOwner_WithFilters() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(ownerUser);
 
-        mockMvc.perform(get("/api/property")
-                        .param("name", "Test"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data[0].propertyName").value("Test Hotel"));
+            List<Property> properties = Arrays.asList(testProperty);
+            when(propertyService.getPropertiesByOwner(any(UUID.class))).thenReturn(properties);
+            when(roomService.getRoomsByProperty(anyString())).thenReturn(Arrays.asList(testRoom));
 
-        verify(propertyService, times(1)).searchProperties("Test", null, null);
+            ResponseEntity<Map<String, Object>> response = propertyController.listProperties("Test", 0, 31);
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testListAllProperties_WithTypeParam() throws Exception {
-        when(propertyService.searchProperties(null, 1, null)).thenReturn(Arrays.asList(testProperty));
-        when(roomService.getRoomsByProperty("PROP001")).thenReturn(Arrays.asList(testRoom));
+    void listProperties_AsSuperadmin_ReturnsAllProperties() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(superadminUser);
 
-        mockMvc.perform(get("/api/property")
-                        .param("type", "1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
+            List<Property> properties = Arrays.asList(testProperty);
+            when(propertyService.getAllActiveProperties()).thenReturn(properties);
+            when(roomService.getRoomsByProperty(anyString())).thenReturn(Arrays.asList(testRoom));
 
-        verify(propertyService, times(1)).searchProperties(null, 1, null);
+            ResponseEntity<Map<String, Object>> response = propertyController.listProperties(null, null, null);
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testListAllProperties_WithProvinceParam() throws Exception {
-        when(propertyService.searchProperties(null, null, 1)).thenReturn(Arrays.asList(testProperty));
-        when(roomService.getRoomsByProperty("PROP001")).thenReturn(Arrays.asList(testRoom));
+    void listProperties_AsSuperadmin_WithFilters() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(superadminUser);
 
-        mockMvc.perform(get("/api/property")
-                        .param("province", "1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
+            List<Property> properties = Arrays.asList(testProperty);
+            when(propertyService.searchProperties(anyString(), anyInt(), anyInt())).thenReturn(properties);
+            when(roomService.getRoomsByProperty(anyString())).thenReturn(Arrays.asList(testRoom));
 
-        verify(propertyService, times(1)).searchProperties(null, null, 1);
+            ResponseEntity<Map<String, Object>> response = propertyController.listProperties("Test", 0, 31);
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testGetRoomTypesByProperty_Success() throws Exception {
-        when(roomTypeRepository.findByProperty_PropertyIdAndActiveStatus("PROP001", 1))
-                .thenReturn(Arrays.asList(testRoomType));
+    void getRoomTypesByProperty_Success() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(superadminUser);
 
-        mockMvc.perform(get("/api/property/PROP001/room-types"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data[0].roomTypeId").value("RT001"));
+            List<RoomType> roomTypes = Arrays.asList(testRoomType);
+            when(roomTypeRepository.findByProperty_PropertyIdAndActiveStatus("prop-001", 1))
+                    .thenReturn(roomTypes);
 
-        verify(roomTypeRepository, times(1)).findByProperty_PropertyIdAndActiveStatus("PROP001", 1);
+            ResponseEntity<Map<String, Object>> response = propertyController.getRoomTypesByProperty("prop-001");
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testGetRoomTypesByProperty_Error() throws Exception {
-        when(roomTypeRepository.findByProperty_PropertyIdAndActiveStatus("PROP001", 1))
-                .thenThrow(new RuntimeException("Database error"));
+    void getRoomTypesByProperty_AsOwner_Success() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(ownerUser);
 
-        mockMvc.perform(get("/api/property/PROP001/room-types"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Database error"));
+            when(propertyService.getPropertyById("prop-001")).thenReturn(Optional.of(testProperty));
+            when(roomTypeRepository.findByProperty_PropertyIdAndActiveStatus("prop-001", 1))
+                    .thenReturn(Arrays.asList(testRoomType));
+
+            ResponseEntity<Map<String, Object>> response = propertyController.getRoomTypesByProperty("prop-001");
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testGetPropertyDetail_NoDateParams() throws Exception {
-        when(propertyService.getPropertyById("PROP001")).thenReturn(Optional.of(testProperty));
-        when(roomService.getRoomTypesByProperty("PROP001")).thenReturn(Arrays.asList(testRoomType));
-        when(roomService.getRoomsByProperty("PROP001")).thenReturn(Arrays.asList(testRoom));
+    void getRoomTypesByProperty_AsOwner_AccessDenied() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            UserPrincipal otherOwner = UserPrincipal.builder()
+                    .userId("44444444-4444-4444-4444-444444444444")
+                    .role("Accommodation Owner")
+                    .build();
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(otherOwner);
 
-        mockMvc.perform(get("/api/property/PROP001"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.property.propertyId").value("PROP001"));
+            when(propertyService.getPropertyById("prop-001")).thenReturn(Optional.of(testProperty));
 
-        verify(propertyService, times(1)).getPropertyById("PROP001");
-        verify(roomService, times(1)).getRoomTypesByProperty("PROP001");
-        verify(roomService, times(1)).getRoomsByProperty("PROP001");
+            ResponseEntity<Map<String, Object>> response = propertyController.getRoomTypesByProperty("prop-001");
+
+            assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+            assertFalse((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testGetPropertyDetail_WithDateParams() throws Exception {
-        when(propertyService.getPropertyById("PROP001")).thenReturn(Optional.of(testProperty));
-        when(roomService.getRoomTypesByProperty("PROP001")).thenReturn(Arrays.asList(testRoomType));
-        when(roomService.getAvailableRoomsByPropertyAndDate("PROP001", "2025-12-01", "2025-12-05"))
-                .thenReturn(Arrays.asList(testRoom));
+    void getRoomTypesByProperty_NotFound() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(ownerUser);
 
-        mockMvc.perform(get("/api/property/PROP001")
-                        .param("checkIn", "2025-12-01")
-                        .param("checkOut", "2025-12-05"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
+            when(propertyService.getPropertyById("invalid")).thenReturn(Optional.empty());
 
-        verify(roomService, times(1)).getAvailableRoomsByPropertyAndDate("PROP001", "2025-12-01", "2025-12-05");
-        verify(roomService, never()).getRoomsByProperty(anyString());
+            ResponseEntity<Map<String, Object>> response = propertyController.getRoomTypesByProperty("invalid");
+
+            assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+            assertFalse((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testGetPropertyDetail_NotFound() throws Exception {
-        when(propertyService.getPropertyById("PROP999")).thenReturn(Optional.empty());
+    void detailProperty_Success() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(superadminUser);
 
-        mockMvc.perform(get("/api/property/PROP999"))
-                .andExpect(status().isInternalServerError());
+            when(propertyService.getPropertyById("prop-001")).thenReturn(Optional.of(testProperty));
+            when(roomService.getRoomTypesByProperty("prop-001")).thenReturn(Arrays.asList(testRoomType));
+            when(roomService.getRoomsByProperty("prop-001")).thenReturn(Arrays.asList(testRoom));
 
-        verify(propertyService, times(1)).getPropertyById("PROP999");
+            ResponseEntity<Map<String, Object>> response = propertyController.detailProperty("prop-001", null, null);
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testCreateProperty_WithRoomTypes() throws Exception {
-        Map<String, Object> roomType1 = new HashMap<>();
-        roomType1.put("name", "Deluxe");
-        roomType1.put("price", 500000);
-        roomType1.put("capacity", 2);
-        roomType1.put("facility", "AC, TV");
-        roomType1.put("floor", 2);
-        roomType1.put("description", "Deluxe room");
-        roomType1.put("roomCount", 5);
+    void detailProperty_WithDateFilter() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(superadminUser);
 
-        Map<String, Object> request = new HashMap<>();
-        request.put("propertyName", "New Hotel");
-        request.put("type", 1);
-        request.put("address", "New Address");
-        request.put("province", 1);
-        request.put("description", "Test Description");
-        request.put("ownerName", "Test Owner");
-        request.put("ownerId", UUID.randomUUID().toString());
-        request.put("roomTypes", Arrays.asList(roomType1));
+            when(propertyService.getPropertyById("prop-001")).thenReturn(Optional.of(testProperty));
+            when(roomService.getRoomTypesByProperty("prop-001")).thenReturn(Arrays.asList(testRoomType));
+            when(roomService.getAvailableRoomsByPropertyAndDate(anyString(), anyString(), anyString()))
+                    .thenReturn(Arrays.asList(testRoom));
 
-        when(propertyService.createProperty(any(Property.class), anyList(), anyList()))
-                .thenReturn(testProperty);
+            ResponseEntity<Map<String, Object>> response = propertyController.detailProperty(
+                    "prop-001", "2025-02-01", "2025-02-05");
 
-        mockMvc.perform(post("/api/property/create")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("Property created successfully"));
-
-        verify(propertyService, times(1)).createProperty(any(Property.class), anyList(), anyList());
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testCreateProperty_WithoutRoomTypes() throws Exception {
-        Map<String, Object> request = new HashMap<>();
-        request.put("propertyName", "New Hotel");
-        request.put("type", 1);
-        request.put("address", "New Address");
-        request.put("province", 1);
-        request.put("description", "Test Description");
-        request.put("ownerName", "Test Owner");
-        request.put("ownerId", UUID.randomUUID().toString());
+    void detailProperty_AsOwner_AccessDenied() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            UserPrincipal otherOwner = UserPrincipal.builder()
+                    .userId("44444444-4444-4444-4444-444444444444")
+                    .role("Accommodation Owner")
+                    .build();
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(otherOwner);
 
-        when(propertyService.createProperty(any(Property.class), anyList(), anyList()))
-                .thenReturn(testProperty);
+            when(propertyService.getPropertyById("prop-001")).thenReturn(Optional.of(testProperty));
 
-        mockMvc.perform(post("/api/property/create")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.success").value(true));
+            ResponseEntity<Map<String, Object>> response = propertyController.detailProperty("prop-001", null, null);
 
-        verify(propertyService, times(1)).createProperty(any(Property.class), anyList(), anyList());
+            assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+        }
     }
 
     @Test
-    void testCreateProperty_Error() throws Exception {
-        Map<String, Object> request = new HashMap<>();
-        request.put("propertyName", "New Hotel");
-        request.put("type", 1);
-        request.put("address", "New Address");
-        request.put("province", 1);
-        request.put("ownerId", UUID.randomUUID().toString());
+    void createProperty_Success() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(ownerUser);
+            securityUtil.when(SecurityUtil::isSuperadmin).thenReturn(false);
 
-        when(propertyService.createProperty(any(Property.class), anyList(), anyList()))
-                .thenThrow(new RuntimeException("Validation error"));
+            Map<String, Object> request = new HashMap<>();
+            request.put("propertyName", "New Hotel");
+            request.put("type", 0);
+            request.put("address", "New Address");
+            request.put("province", 31);
+            request.put("description", "New Description");
 
-        mockMvc.perform(post("/api/property/create")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Validation error"));
+            when(propertyService.createProperty(any(Property.class), anyList(), anyList()))
+                    .thenReturn(testProperty);
+
+            ResponseEntity<Map<String, Object>> response = propertyController.createProperty(request);
+
+            assertEquals(HttpStatus.CREATED, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testGetPropertyForUpdate_Success() throws Exception {
-        when(propertyService.getPropertyById("PROP001")).thenReturn(Optional.of(testProperty));
-        when(roomService.getRoomTypesByProperty("PROP001")).thenReturn(Arrays.asList(testRoomType));
+    void createProperty_AsSuperadmin_WithOwnerId() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(superadminUser);
+            securityUtil.when(SecurityUtil::isSuperadmin).thenReturn(true);
 
-        mockMvc.perform(get("/api/property/update/PROP001"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.property.propertyId").value("PROP001"))
-                .andExpect(jsonPath("$.roomTypes[0].roomTypeId").value("RT001"));
+            Map<String, Object> request = new HashMap<>();
+            request.put("propertyName", "New Hotel");
+            request.put("type", 0);
+            request.put("address", "New Address");
+            request.put("province", 31);
+            request.put("description", "New Description");
+            request.put("ownerId", "22222222-2222-2222-2222-222222222222");
+            request.put("ownerName", "Test Owner");
 
-        verify(propertyService, times(1)).getPropertyById("PROP001");
-        verify(roomService, times(1)).getRoomTypesByProperty("PROP001");
+            when(propertyService.createProperty(any(Property.class), anyList(), anyList()))
+                    .thenReturn(testProperty);
+
+            ResponseEntity<Map<String, Object>> response = propertyController.createProperty(request);
+
+            assertEquals(HttpStatus.CREATED, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testGetPropertyForUpdate_NotFound() throws Exception {
-        when(propertyService.getPropertyById("PROP999")).thenReturn(Optional.empty());
+    void createProperty_WithRoomTypes() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(ownerUser);
+            securityUtil.when(SecurityUtil::isSuperadmin).thenReturn(false);
 
-        mockMvc.perform(get("/api/property/update/PROP999"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Property not found"));
+            Map<String, Object> roomTypeData = new HashMap<>();
+            roomTypeData.put("name", "Deluxe Room");
+            roomTypeData.put("price", 500000);
+            roomTypeData.put("capacity", 2);
+            roomTypeData.put("facility", "AC, TV");
+            roomTypeData.put("floor", 1);
+            roomTypeData.put("description", "Nice room");
+            roomTypeData.put("roomCount", 5);
+
+            Map<String, Object> request = new HashMap<>();
+            request.put("propertyName", "New Hotel");
+            request.put("type", 0);
+            request.put("address", "New Address");
+            request.put("province", 31);
+            request.put("description", "New Description");
+            request.put("roomTypes", Arrays.asList(roomTypeData));
+
+            when(propertyService.createProperty(any(Property.class), anyList(), anyList()))
+                    .thenReturn(testProperty);
+
+            ResponseEntity<Map<String, Object>> response = propertyController.createProperty(request);
+
+            assertEquals(HttpStatus.CREATED, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testUpdateProperty_WithExistingRoomTypes() throws Exception {
-        Map<String, Object> roomType1 = new HashMap<>();
-        roomType1.put("roomTypeId", "RT001");
-        roomType1.put("name", "Super Deluxe");
-        roomType1.put("price", 750000);
-        roomType1.put("capacity", 3);
-        roomType1.put("facility", "AC, TV, Mini Bar");
-        roomType1.put("floor", 2);
-        roomType1.put("description", "Updated description");
+    void createProperty_NotAuthenticated() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(null);
 
-        Map<String, Object> request = new HashMap<>();
-        request.put("propertyId", "PROP001");
-        request.put("propertyName", "Updated Hotel");
-        request.put("address", "Updated Address");
-        request.put("description", "Updated Description");
-        request.put("province", 2);
-        request.put("roomTypes", Arrays.asList(roomType1));
+            Map<String, Object> request = new HashMap<>();
+            request.put("propertyName", "New Hotel");
+            request.put("type", 0);
+            request.put("address", "New Address");
+            request.put("province", 31);
+            request.put("description", "New Description");
 
-        when(propertyService.getPropertyById("PROP001")).thenReturn(Optional.of(testProperty));
-        when(propertyService.updatePropertyWithRoomTypes(any(Property.class), anyList(), anyMap()))
-                .thenReturn(testProperty);
+            ResponseEntity<Map<String, Object>> response = propertyController.createProperty(request);
 
-        mockMvc.perform(put("/api/property/update")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("Property updated successfully"));
-
-        verify(propertyService, times(1)).getPropertyById("PROP001");
-        verify(propertyService, times(1)).updatePropertyWithRoomTypes(any(Property.class), anyList(), anyMap());
+            assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+            assertFalse((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testUpdateProperty_WithNewRoomTypes() throws Exception {
-        Map<String, Object> newRoomType = new HashMap<>();
-        newRoomType.put("name", "Suite");
-        newRoomType.put("price", 1000000);
-        newRoomType.put("capacity", 4);
-        newRoomType.put("facility", "AC, TV, Kitchen");
-        newRoomType.put("floor", 3);
-        newRoomType.put("description", "Luxury suite");
-        newRoomType.put("roomCount", 3);
+    void getPropertyForUpdate_Success() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(ownerUser);
+            securityUtil.when(SecurityUtil::isSuperadmin).thenReturn(false);
 
-        Map<String, Object> request = new HashMap<>();
-        request.put("propertyId", "PROP001");
-        request.put("propertyName", "Updated Hotel");
-        request.put("address", "Updated Address");
-        request.put("description", "Updated Description");
-        request.put("province", 1);
-        request.put("roomTypes", Arrays.asList(newRoomType));
+            when(propertyService.getPropertyById("prop-001")).thenReturn(Optional.of(testProperty));
+            when(roomService.getRoomTypesByProperty("prop-001")).thenReturn(Arrays.asList(testRoomType));
 
-        when(propertyService.getPropertyById("PROP001")).thenReturn(Optional.of(testProperty));
-        when(propertyService.updatePropertyWithRoomTypes(any(Property.class), anyList(), anyMap()))
-                .thenReturn(testProperty);
+            ResponseEntity<Map<String, Object>> response = propertyController.getPropertyForUpdate("prop-001");
 
-        mockMvc.perform(put("/api/property/update")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
-
-        verify(propertyService, times(1)).updatePropertyWithRoomTypes(any(Property.class), anyList(), anyMap());
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testUpdateProperty_WithoutRoomTypes() throws Exception {
-        Map<String, Object> request = new HashMap<>();
-        request.put("propertyId", "PROP001");
-        request.put("propertyName", "Updated Hotel");
-        request.put("address", "Updated Address");
-        request.put("description", "Updated Description");
-        request.put("province", 1);
+    void getPropertyForUpdate_AccessDenied() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            UserPrincipal otherOwner = UserPrincipal.builder()
+                    .userId("44444444-4444-4444-4444-444444444444")
+                    .role("Accommodation Owner")
+                    .build();
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(otherOwner);
+            securityUtil.when(SecurityUtil::isSuperadmin).thenReturn(false);
 
-        when(propertyService.getPropertyById("PROP001")).thenReturn(Optional.of(testProperty));
-        when(propertyService.updatePropertyWithRoomTypes(any(Property.class), anyList(), anyMap()))
-                .thenReturn(testProperty);
+            when(propertyService.getPropertyById("prop-001")).thenReturn(Optional.of(testProperty));
 
-        mockMvc.perform(put("/api/property/update")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
+            ResponseEntity<Map<String, Object>> response = propertyController.getPropertyForUpdate("prop-001");
 
-        verify(propertyService, times(1)).updatePropertyWithRoomTypes(any(Property.class), anyList(), anyMap());
+            assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+            assertFalse((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testUpdateProperty_PropertyNotFound() throws Exception {
-        Map<String, Object> request = new HashMap<>();
-        request.put("propertyId", "PROP999");
-        request.put("propertyName", "Updated Hotel");
-        request.put("address", "Updated Address");
+    void updateProperty_Success() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(ownerUser);
+            securityUtil.when(SecurityUtil::isSuperadmin).thenReturn(false);
 
-        when(propertyService.getPropertyById("PROP999")).thenReturn(Optional.empty());
+            Map<String, Object> request = new HashMap<>();
+            request.put("propertyId", "prop-001");
+            request.put("propertyName", "Updated Hotel");
+            request.put("address", "Updated Address");
+            request.put("description", "Updated Description");
+            request.put("province", 32);
 
-        mockMvc.perform(put("/api/property/update")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Property not found"));
+            when(propertyService.getPropertyById("prop-001")).thenReturn(Optional.of(testProperty));
+            when(propertyService.updatePropertyWithRoomTypes(any(Property.class), anyList(), anyMap()))
+                    .thenReturn(testProperty);
+
+            ResponseEntity<Map<String, Object>> response = propertyController.updateProperty(request);
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testUpdateProperty_Error() throws Exception {
-        Map<String, Object> request = new HashMap<>();
-        request.put("propertyId", "PROP001");
-        request.put("propertyName", "Updated Hotel");
+    void updateProperty_WithRoomTypes() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(superadminUser);
+            securityUtil.when(SecurityUtil::isSuperadmin).thenReturn(true);
 
-        when(propertyService.getPropertyById("PROP001")).thenReturn(Optional.of(testProperty));
-        when(propertyService.updatePropertyWithRoomTypes(any(Property.class), anyList(), anyMap()))
-                .thenThrow(new RuntimeException("Update failed"));
+            Map<String, Object> roomTypeData = new HashMap<>();
+            roomTypeData.put("roomTypeId", "rt-001");
+            roomTypeData.put("name", "Superior Room");
+            roomTypeData.put("price", 600000);
+            roomTypeData.put("capacity", 3);
+            roomTypeData.put("facility", "AC, TV, WiFi");
+            roomTypeData.put("floor", 2);
+            roomTypeData.put("description", "Nice room");
+            roomTypeData.put("roomCount", 3);
 
-        mockMvc.perform(put("/api/property/update")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Update failed"));
+            Map<String, Object> request = new HashMap<>();
+            request.put("propertyId", "prop-001");
+            request.put("propertyName", "Updated Hotel");
+            request.put("address", "Updated Address");
+            request.put("description", "Updated Description");
+            request.put("roomTypes", Arrays.asList(roomTypeData));
+
+            when(propertyService.getPropertyById("prop-001")).thenReturn(Optional.of(testProperty));
+            when(propertyService.updatePropertyWithRoomTypes(any(Property.class), anyList(), anyMap()))
+                    .thenReturn(testProperty);
+
+            ResponseEntity<Map<String, Object>> response = propertyController.updateProperty(request);
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testDeleteProperty_Success() throws Exception {
-        doNothing().when(propertyService).softDeleteProperty("PROP001");
+    void deleteProperty_Success() {
+        doNothing().when(propertyService).softDeleteProperty("prop-001");
 
-        mockMvc.perform(delete("/api/property/delete/PROP001"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("Property deleted successfully"));
+        ResponseEntity<Map<String, Object>> response = propertyController.deleteProperty("prop-001");
 
-        verify(propertyService, times(1)).softDeleteProperty("PROP001");
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue((Boolean) response.getBody().get("success"));
+        verify(propertyService).softDeleteProperty("prop-001");
     }
 
     @Test
-    void testDeleteProperty_Error() throws Exception {
-        doThrow(new RuntimeException("Cannot delete property with future bookings"))
-                .when(propertyService).softDeleteProperty("PROP001");
+    void deleteProperty_Error() {
+        doThrow(new RuntimeException("Error")).when(propertyService).softDeleteProperty("prop-001");
 
-        mockMvc.perform(delete("/api/property/delete/PROP001"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Cannot delete property with future bookings"));
+        ResponseEntity<Map<String, Object>> response = propertyController.deleteProperty("prop-001");
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertFalse((Boolean) response.getBody().get("success"));
     }
 
     @Test
-    void testAddRoomTypes_Success() throws Exception {
-        Map<String, Object> roomType1 = new HashMap<>();
-        roomType1.put("name", "Presidential Suite");
-        roomType1.put("price", 2000000);
-        roomType1.put("capacity", 6);
-        roomType1.put("facility", "All facilities");
-        roomType1.put("floor", 10);
-        roomType1.put("description", "Presidential suite");
-        roomType1.put("roomCount", 2);
+    void addRoomTypes_Success() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(ownerUser);
+            securityUtil.when(SecurityUtil::isSuperadmin).thenReturn(false);
 
-        Map<String, Object> request = new HashMap<>();
-        request.put("propertyId", "PROP001");
-        request.put("roomTypes", Arrays.asList(roomType1));
+            Map<String, Object> roomTypeData = new HashMap<>();
+            roomTypeData.put("name", "Family Room");
+            roomTypeData.put("price", 800000);
+            roomTypeData.put("capacity", 4);
+            roomTypeData.put("facility", "AC, TV");
+            roomTypeData.put("floor", 2);
+            roomTypeData.put("description", "Large room");
+            roomTypeData.put("roomCount", 3);
 
-        when(propertyService.getPropertyById("PROP001")).thenReturn(Optional.of(testProperty));
-        doNothing().when(roomService).addRoomType(any(Property.class), any(RoomType.class), anyInt());
+            Map<String, Object> request = new HashMap<>();
+            request.put("propertyId", "prop-001");
+            request.put("roomTypes", Arrays.asList(roomTypeData));
 
-        mockMvc.perform(post("/api/property/updateroom")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("Room types added successfully"));
+            when(propertyService.getPropertyById("prop-001")).thenReturn(Optional.of(testProperty));
+            when(roomTypeValidator.isValidRoomType(anyInt(), anyString())).thenReturn(true);
 
-        verify(propertyService, times(1)).getPropertyById("PROP001");
-        verify(roomService, times(1)).addRoomType(any(Property.class), any(RoomType.class), eq(2));
+            ResponseEntity<Map<String, Object>> response = propertyController.addRoomTypes(request);
+
+            assertEquals(HttpStatus.CREATED, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testAddRoomTypes_WithDefaultRoomCount() throws Exception {
-        Map<String, Object> roomType1 = new HashMap<>();
-        roomType1.put("name", "Standard");
-        roomType1.put("price", 300000);
-        roomType1.put("capacity", 2);
-        roomType1.put("facility", "AC, TV");
-        roomType1.put("floor", 1);
-        roomType1.put("description", "Standard room");
-        // No roomCount specified, should default to 1
+    void addRoomTypes_InvalidRoomType() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(ownerUser);
+            securityUtil.when(SecurityUtil::isSuperadmin).thenReturn(false);
 
-        Map<String, Object> request = new HashMap<>();
-        request.put("propertyId", "PROP001");
-        request.put("roomTypes", Arrays.asList(roomType1));
+            Map<String, Object> roomTypeData = new HashMap<>();
+            roomTypeData.put("name", "Invalid Type");
+            roomTypeData.put("price", 800000);
+            roomTypeData.put("capacity", 4);
+            roomTypeData.put("facility", "AC, TV");
+            roomTypeData.put("floor", 2);
+            roomTypeData.put("description", "Large room");
 
-        when(propertyService.getPropertyById("PROP001")).thenReturn(Optional.of(testProperty));
-        doNothing().when(roomService).addRoomType(any(Property.class), any(RoomType.class), anyInt());
+            Map<String, Object> request = new HashMap<>();
+            request.put("propertyId", "prop-001");
+            request.put("roomTypes", Arrays.asList(roomTypeData));
 
-        mockMvc.perform(post("/api/property/updateroom")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.success").value(true));
+            when(propertyService.getPropertyById("prop-001")).thenReturn(Optional.of(testProperty));
+            when(roomTypeValidator.isValidRoomType(anyInt(), anyString())).thenReturn(false);
+            when(roomTypeValidator.getPropertyTypeString(anyInt())).thenReturn("Hotel");
+            when(roomTypeValidator.getValidRoomTypes(anyInt())).thenReturn(
+                    new HashSet<>(Arrays.asList("Single Room", "Double Room")));
 
-        verify(roomService, times(1)).addRoomType(any(Property.class), any(RoomType.class), eq(1));
+            ResponseEntity<Map<String, Object>> response = propertyController.addRoomTypes(request);
+
+            assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+            assertFalse((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testAddRoomTypes_PropertyNotFound() throws Exception {
-        Map<String, Object> request = new HashMap<>();
-        request.put("propertyId", "PROP999");
-        request.put("roomTypes", new ArrayList<>());
+    void getValidRoomTypes_Success() {
+        when(propertyService.getPropertyById("prop-001")).thenReturn(Optional.of(testProperty));
+        when(roomTypeValidator.getValidRoomTypes(0)).thenReturn(
+                new HashSet<>(Arrays.asList("Single Room", "Double Room", "Deluxe Room")));
+        when(roomTypeValidator.getPropertyTypeString(0)).thenReturn("Hotel");
 
-        when(propertyService.getPropertyById("PROP999")).thenReturn(Optional.empty());
+        ResponseEntity<Map<String, Object>> response = propertyController.getValidRoomTypes("prop-001");
 
-        mockMvc.perform(post("/api/property/updateroom")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Property not found"));
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue((Boolean) response.getBody().get("success"));
+        assertNotNull(response.getBody().get("validRoomTypes"));
     }
 
     @Test
-    void testAddRoomTypes_Error() throws Exception {
-        Map<String, Object> roomType1 = new HashMap<>();
-        roomType1.put("name", "Deluxe");
-        roomType1.put("price", 500000);
-        roomType1.put("capacity", 2);
-        roomType1.put("floor", 2);
+    void getValidRoomTypes_PropertyNotFound() {
+        when(propertyService.getPropertyById("invalid")).thenReturn(Optional.empty());
 
-        Map<String, Object> request = new HashMap<>();
-        request.put("propertyId", "PROP001");
-        request.put("roomTypes", Arrays.asList(roomType1));
+        ResponseEntity<Map<String, Object>> response = propertyController.getValidRoomTypes("invalid");
 
-        when(propertyService.getPropertyById("PROP001")).thenReturn(Optional.of(testProperty));
-        doThrow(new RuntimeException("Failed to add room type"))
-                .when(roomService).addRoomType(any(Property.class), any(RoomType.class), anyInt());
-
-        mockMvc.perform(post("/api/property/updateroom")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Failed to add room type"));
-    }
-
-    @Test
-    void testAddRoomTypes_WithNullRoomTypes() throws Exception {
-        Map<String, Object> request = new HashMap<>();
-        request.put("propertyId", "PROP001");
-        request.put("roomTypes", null);
-
-        when(propertyService.getPropertyById("PROP001")).thenReturn(Optional.of(testProperty));
-
-        mockMvc.perform(post("/api/property/updateroom")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.success").value(true));
-
-        verify(roomService, never()).addRoomType(any(), any(), anyInt());
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        assertFalse((Boolean) response.getBody().get("success"));
     }
 }

@@ -65,13 +65,23 @@ public class AccommodationReviewController {
     public ResponseEntity<List<ReviewResponseDTO>> getMyReviews() {
         UserPrincipal currentUser = SecurityUtil.getCurrentUser();
         UUID userId = UUID.fromString(currentUser.getUserId());
+        String role = currentUser.getRole();
         
-        log.info("GET /api/reviews/my-reviews - userId={}, role={}", userId, currentUser.getRole());
+        log.info("GET /api/reviews/my-reviews - userId={}, role={}", userId, role);
         
-        // For Customer, get their reviews
-        // For Accommodation Owner, this will be filtered by property ownership in service
-        // For Superadmin, get all reviews
-        List<ReviewResponseDTO> reviews = reviewService.getReviewsByCustomer(userId);
+        List<ReviewResponseDTO> reviews;
+        
+        if (SecurityUtil.isCustomer()) {
+            // Customer: Only their own reviews
+            reviews = reviewService.getReviewsByCustomer(userId);
+        } else if (SecurityUtil.isAccommodationOwner()) {
+            // Accommodation Owner: Reviews for their properties
+            reviews = reviewService.getReviewsForOwnerProperties(userId);
+        } else {
+            // Superadmin: All reviews
+            reviews = reviewService.getAllReviews();
+        }
+        
         return ResponseEntity.ok(reviews);
     }
 

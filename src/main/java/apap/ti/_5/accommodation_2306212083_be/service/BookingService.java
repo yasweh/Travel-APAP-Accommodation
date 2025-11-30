@@ -18,7 +18,6 @@ public interface BookingService {
     AccommodationBooking updateBooking(String id, AccommodationBooking updatedBooking);
     AccommodationBooking payBooking(String id);
     AccommodationBooking cancelBooking(String id);
-    AccommodationBooking refundBooking(String id);
     void autoCheckInBookings();
     
     // New methods for DTO-based operations
@@ -29,7 +28,6 @@ public interface BookingService {
     List<BookingResponseDTO> getAllBookingsAsDTO();
     void payBookingById(String id);
     void cancelBookingById(String id);
-    void refundBookingById(String id);
     
     // Availability check
     boolean isRoomAvailableForDates(String roomId, LocalDateTime checkIn, LocalDateTime checkOut);

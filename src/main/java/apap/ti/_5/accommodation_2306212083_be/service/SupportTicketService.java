@@ -32,16 +32,19 @@ public class SupportTicketService {
     private final TicketMessageRepository messageRepository;
     private final SupportProgressRepository progressRepository;
     private final ExternalBookingService externalBookingService;
+    private final PropertyService propertyService;
     
     public SupportTicketService(
             SupportTicketRepository ticketRepository,
             TicketMessageRepository messageRepository,
             SupportProgressRepository progressRepository,
-            ExternalBookingService externalBookingService) {
+            ExternalBookingService externalBookingService,
+            PropertyService propertyService) {
         this.ticketRepository = ticketRepository;
         this.messageRepository = messageRepository;
         this.progressRepository = progressRepository;
         this.externalBookingService = externalBookingService;
+        this.propertyService = propertyService;
     }
     
     /**
@@ -61,20 +64,72 @@ public class SupportTicketService {
     }
     
     /**
-     * GET /api/support-tickets/{id}
-     * Get detailed ticket info including messages, progress, and external booking data
+     * Get tickets for Accommodation Owner (filtered by their properties)
      */
     @Transactional(readOnly = true)
-    public TicketDetailResponseDTO getTicketDetail(UUID ticketId, UUID requestingUserId) {
-        log.info("Fetching ticket detail for ticketId={}", ticketId);
+    public List<TicketResponseDTO> getAllTicketsForOwner(UUID ownerId, TicketStatus status, ServiceSource serviceSource) {
+        log.info("Fetching tickets for owner: ownerId={}, status={}, serviceSource={}", 
+                ownerId, status, serviceSource);
+        
+        // Get all properties owned by this owner
+        List<String> ownedPropertyIds = propertyService.getPropertiesByOwner(ownerId)
+                .stream()
+                .map(property -> property.getPropertyId())
+                .collect(Collectors.toList());
+        
+        if (ownedPropertyIds.isEmpty()) {
+            log.info("Owner {} has no properties, returning empty ticket list", ownerId);
+            return List.of();
+        }
+        
+        // Get all tickets for ACCOMMODATION service that belong to owner's properties
+        List<SupportTicket> tickets = ticketRepository.findByFilters(null, status, ServiceSource.ACCOMMODATION);
+        
+        // Filter by properties owned by this owner
+        List<SupportTicket> filteredTickets = tickets.stream()
+                .filter(ticket -> ticket.getPropertyId() != null)
+                .filter(ticket -> ownedPropertyIds.contains(ticket.getPropertyId()))
+                .collect(Collectors.toList());
+        
+        log.info("Found {} tickets for owner's {} properties", filteredTickets.size(), ownedPropertyIds.size());
+        
+        return filteredTickets.stream()
+                .map(this::mapToTicketResponse)
+                .collect(Collectors.toList());
+    }
+    
+    /**
+     * GET /api/support-tickets/{id} with access control
+     */
+    @Transactional(readOnly = true)
+    public TicketDetailResponseDTO getTicketDetailWithAccess(UUID ticketId, UUID requestingUserId, String role) {
+        log.info("Fetching ticket detail for ticketId={}, requestingUserId={}, role={}", 
+                ticketId, requestingUserId, role);
         
         SupportTicket ticket = ticketRepository.findByIdAndDeletedFalse(ticketId)
                 .orElseThrow(() -> new TicketNotFoundException("Ticket not found with id: " + ticketId));
         
-        // Verify user has access to this ticket - DISABLED for debug
-        // if (!ticket.getUserId().equals(requestingUserId)) {
-        //     throw new IllegalArgumentException("User does not have access to this ticket");
-        // }
+        // Access control based on role
+        if ("Customer".equals(role)) {
+            // Customer can only see their own tickets
+            if (!ticket.getUserId().equals(requestingUserId)) {
+                throw new IllegalArgumentException("Access denied: You can only view your own tickets");
+            }
+        } else if ("Accommodation Owner".equals(role)) {
+            // Owner can see tickets for their properties
+            if (ticket.getPropertyId() == null) {
+                throw new IllegalArgumentException("Access denied: This ticket is not for your property");
+            }
+            // Check if owner actually owns this property
+            var propertyOpt = propertyService.getPropertyById(ticket.getPropertyId());
+            if (propertyOpt.isEmpty()) {
+                throw new IllegalArgumentException("Access denied: Property not found");
+            }
+            if (!propertyOpt.get().getOwnerId().equals(requestingUserId)) {
+                throw new IllegalArgumentException("Access denied: This ticket is not for your property");
+            }
+        }
+        // Superadmin can see all tickets
         
         // Fetch messages
         List<MessageResponseDTO> messages = messageRepository
@@ -187,6 +242,61 @@ public class SupportTicketService {
     }
     
     /**
+     * PATCH /api/support-tickets/{id}/status with permission check
+     * Update ticket status (customers can only close, admin/owner can change to any status)
+     */
+    @Transactional
+    public TicketResponseDTO updateTicketStatusWithPermissionCheck(UUID ticketId, UpdateStatusRequestDTO request, 
+                                                                    UUID userId, String role) {
+        log.info("Updating ticket status for ticketId={} to {} by userId={}, role={}", 
+                ticketId, request.getStatus(), userId, role);
+        
+        SupportTicket ticket = ticketRepository.findByIdAndDeletedFalse(ticketId)
+                .orElseThrow(() -> new TicketNotFoundException("Ticket not found with id: " + ticketId));
+        
+        // Permission check for Customer
+        if ("Customer".equals(role)) {
+            // Customer can only close their own tickets
+            if (!ticket.getUserId().equals(userId)) {
+                throw new IllegalArgumentException("Access denied: You can only update your own tickets");
+            }
+            
+            if (!TicketStatus.CLOSED.equals(request.getStatus())) {
+                throw new IllegalArgumentException("Access denied: Customers can only close tickets");
+            }
+        } else if ("Accommodation Owner".equals(role)) {
+            // Owner can change status for tickets related to their properties
+            if (ServiceSource.ACCOMMODATION.equals(ticket.getServiceSource())) {
+                if (ticket.getPropertyId() != null) {
+                    var property = propertyService.getPropertyById(ticket.getPropertyId());
+                    if (property.isEmpty() || !property.get().getOwnerId().equals(userId)) {
+                        throw new IllegalArgumentException("Access denied: You do not own the property associated with this ticket");
+                    }
+                }
+            } else {
+                throw new IllegalArgumentException("Access denied: You can only update accommodation tickets");
+            }
+        }
+        // Superadmin can update any ticket
+        
+        TicketStatus oldStatus = ticket.getStatus();
+        ticket.setStatus(request.getStatus());
+        ticket = ticketRepository.save(ticket);
+        
+        // Add progress entry for status change
+        String description = String.format("Status changed from %s to %s", oldStatus, request.getStatus());
+        if (request.getReason() != null && !request.getReason().isEmpty()) {
+            description += ". Reason: " + request.getReason();
+        }
+        
+        addProgressEntry(ticket, ActionType.STATUS_CHANGED, description, request.getUpdatedBy());
+        
+        log.info("Ticket status updated successfully");
+        
+        return mapToTicketResponse(ticket);
+    }
+    
+    /**
      * PATCH /api/support-tickets/{id}/status
      * Update ticket status
      */
@@ -239,6 +349,53 @@ public class SupportTicketService {
         ticketRepository.save(ticket);
         
         log.info("Ticket deleted successfully");
+    }
+    
+    /**
+     * POST /api/support-tickets/{id}/progress with permission check
+     * Add progress entry to ticket (only admin or property owner)
+     */
+    @Transactional
+    public ProgressResponseDTO addProgressWithPermissionCheck(UUID ticketId, AddProgressRequestDTO request, 
+                                                               UUID userId, String role) {
+        log.info("Adding progress to ticketId={} by userId={}, role={}", ticketId, userId, role);
+        
+        SupportTicket ticket = ticketRepository.findByIdAndDeletedFalse(ticketId)
+                .orElseThrow(() -> new TicketNotFoundException("Ticket not found with id: " + ticketId));
+        
+        // Permission check for Accommodation Owner
+        if ("Accommodation Owner".equals(role)) {
+            // Owner can only add progress if ticket is for accommodation service and they own the property
+            if (!ServiceSource.ACCOMMODATION.equals(ticket.getServiceSource())) {
+                throw new IllegalArgumentException("Access denied: You can only add progress to accommodation tickets");
+            }
+            
+            if (ticket.getPropertyId() == null) {
+                throw new IllegalArgumentException("Access denied: This ticket is not associated with a property");
+            }
+            
+            // Verify that the owner owns this property
+            var property = propertyService.getPropertyById(ticket.getPropertyId());
+            if (property.isEmpty() || !property.get().getOwnerId().equals(userId)) {
+                throw new IllegalArgumentException("Access denied: You do not own the property associated with this ticket");
+            }
+        }
+        // Superadmin can add progress to any ticket
+        
+        // If ticket was OPEN, change to IN_PROGRESS
+        if (ticket.getStatus() == TicketStatus.OPEN) {
+            ticket.setStatus(TicketStatus.IN_PROGRESS);
+            ticketRepository.save(ticket);
+        }
+        
+        SupportProgress progress = addProgressEntry(
+                ticket,
+                ActionType.PROGRESS_ADDED,
+                request.getDescription(),
+                request.getPerformedBy()
+        );
+        
+        return mapToProgressResponse(progress);
     }
     
     /**
@@ -430,8 +587,32 @@ public class SupportTicketService {
         dto.setStatus(ticket.getStatus());
         dto.setServiceSource(ticket.getServiceSource());
         dto.setExternalBookingId(ticket.getExternalBookingId());
+        dto.setPropertyId(ticket.getPropertyId());
         dto.setCreatedAt(ticket.getCreatedAt());
         dto.setUpdatedAt(ticket.getUpdatedAt());
+        
+        // Add property name if available
+        if (ticket.getPropertyId() != null) {
+            propertyService.getPropertyById(ticket.getPropertyId())
+                .ifPresent(property -> dto.setPropertyName(property.getPropertyName()));
+        }
+        
+        // Add customer name from external booking service
+        try {
+            Object bookingData = externalBookingService.fetchBookingById(
+                ticket.getServiceSource(), 
+                ticket.getExternalBookingId()
+            );
+            if (bookingData instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> bookingMap = (Map<String, Object>) bookingData;
+                if (bookingMap.containsKey("customerName")) {
+                    dto.setCustomerName((String) bookingMap.get("customerName"));
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Could not fetch customer name for ticket {}: {}", ticket.getId(), e.getMessage());
+        }
         
         // Count unread messages
         long unreadCount = messageRepository.countByTicketIdAndReadByRecipientFalseAndDeletedFalse(ticket.getId());

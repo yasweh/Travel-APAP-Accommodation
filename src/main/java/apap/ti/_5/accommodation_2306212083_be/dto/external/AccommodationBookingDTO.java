@@ -25,6 +25,9 @@ public class AccommodationBookingDTO {
     @JsonProperty("userId")
     private UUID userId;
     
+    @JsonProperty("customerId")
+    private UUID customerId;
+    
     @JsonProperty("checkInDate")
     private LocalDateTime checkInDate;
     

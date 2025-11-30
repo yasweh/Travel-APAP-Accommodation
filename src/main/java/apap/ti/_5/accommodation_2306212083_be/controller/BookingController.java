@@ -214,32 +214,6 @@ public class BookingController {
         }
     }
 
-    /**
-     * PUT /api/bookings/refund/{id} - Request refund (status 1 -> 3)
-     * Requires: CUSTOMER role (own booking only)
-     */
-    @PutMapping("/refund/{id}")
-    @PreAuthorize("hasAuthority('Customer')")
-    public ResponseEntity<Map<String, Object>> refundBooking(@PathVariable String id) {
-        try {
-            // Use OwnerValidationService for ownership validation
-            // SECURITY DISABLED - ownerValidationService.validateBookingOwnership(id);
-            
-            bookingService.refundBooking(id);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "Refund requested successfully");
-            
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", e.getMessage());
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
-        }
-    }
-
     // ============ NEW ENDPOINTS FOR BOOKING MANAGEMENT ============
 
     /**
@@ -385,14 +359,8 @@ public class BookingController {
                 booking = bookingService.createBookingWithSelection(request);
             }
             
-            // Auto-set customer information from authenticated user
-            AccommodationBooking rawBooking = bookingService.getBookingById(booking.getBookingId())
-                .orElseThrow(() -> new RuntimeException("Booking not found after creation"));
-            UserPrincipal currentUser = SecurityUtil.getCurrentUser();
-            rawBooking.setCustomerId(UUID.fromString(currentUser.getUserId()));
-            rawBooking.setCustomerName(currentUser.getName());
-            rawBooking.setCustomerEmail(currentUser.getEmail());
-            bookingService.createBooking(rawBooking); // Update the booking with customer info
+            // Customer info is already auto-set in the service layer from authenticated user
+            // No need to update again here
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -608,52 +576,6 @@ public class BookingController {
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "Booking cancelled successfully");
-            
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", e.getMessage());
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
-        }
-    }
-
-    /**
-     * POST /api/bookings/status/refund - Request refund
-     * Requires: Authenticated user (Customer: own booking, Owner: their property, Superadmin: all)
-     */
-    @PostMapping("/status/refund")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<Map<String, Object>> refundBookingStatus(@RequestBody Map<String, String> request) {
-        try {
-            String bookingId = request.get("bookingId");
-            UserPrincipal currentUser = SecurityUtil.getCurrentUser();
-            AccommodationBooking rawBooking = bookingService.getBookingById(bookingId).orElseThrow();
-            
-            // Validate access based on role
-            if (SecurityUtil.isCustomer()) {
-                UUID userId = UUID.fromString(currentUser.getUserId());
-                if (!rawBooking.getCustomerId().equals(userId)) {
-                    Map<String, Object> response = new HashMap<>();
-                    response.put("success", false);
-                    response.put("message", "Access denied: You can only request refund for your own bookings");
-                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
-                }
-            } else if (SecurityUtil.isAccommodationOwner()) {
-                Property property = rawBooking.getRoom().getRoomType().getProperty();
-                if (!property.getOwnerId().toString().equals(currentUser.getUserId())) {
-                    Map<String, Object> response = new HashMap<>();
-                    response.put("success", false);
-                    response.put("message", "Access denied: This booking is not for your property");
-                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
-                }
-            }
-            
-            bookingService.refundBookingById(bookingId);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "Refund requested successfully");
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {

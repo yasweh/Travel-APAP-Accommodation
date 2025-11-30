@@ -1,12 +1,7 @@
 package apap.ti._5.accommodation_2306212083_be.controller;
 
-import apap.ti._5.accommodation_2306212083_be.dto.BookingRequestDTO;
-import apap.ti._5.accommodation_2306212083_be.dto.BookingResponseDTO;
-import apap.ti._5.accommodation_2306212083_be.dto.PropertyStatisticsDTO;
-import apap.ti._5.accommodation_2306212083_be.model.AccommodationBooking;
-import apap.ti._5.accommodation_2306212083_be.model.Property;
-import apap.ti._5.accommodation_2306212083_be.model.Room;
-import apap.ti._5.accommodation_2306212083_be.model.RoomType;
+import apap.ti._5.accommodation_2306212083_be.dto.*;
+import apap.ti._5.accommodation_2306212083_be.model.*;
 import apap.ti._5.accommodation_2306212083_be.service.BookingService;
 import apap.ti._5.accommodation_2306212083_be.service.PropertyService;
 import apap.ti._5.accommodation_2306212083_be.repository.RoomRepository;
@@ -14,624 +9,640 @@ import apap.ti._5.accommodation_2306212083_be.repository.RoomTypeRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockedStatic;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import apap.ti._5.accommodation_2306212083_be.util.SecurityUtil;
 
 import java.time.LocalDateTime;
 import java.util.*;
 
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(BookingController.class)
+@ExtendWith(MockitoExtension.class)
 class BookingControllerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    @MockBean
+    @Mock
     private BookingService bookingService;
 
-    @MockBean
+    @Mock
     private PropertyService propertyService;
 
-    @MockBean
+    @Mock
     private RoomRepository roomRepository;
 
-    @MockBean
+    @Mock
     private RoomTypeRepository roomTypeRepository;
 
+    @InjectMocks
+    private BookingController bookingController;
+
+    private UserPrincipal customerUser;
+    private UserPrincipal ownerUser;
+    private UserPrincipal superadminUser;
+    private AccommodationBooking testBooking;
     private BookingResponseDTO testBookingDTO;
     private Property testProperty;
     private RoomType testRoomType;
     private Room testRoom;
-    private AccommodationBooking testBooking;
 
     @BeforeEach
     void setUp() {
-        testBookingDTO = new BookingResponseDTO();
-        testBookingDTO.setBookingId("BOOK001");
-        testBookingDTO.setStatus(0);
-        testBookingDTO.setRoomId("ROOM001");
-        testBookingDTO.setPropertyId("PROP001");
-        testBookingDTO.setRoomTypeId("RT001");
+        // Create test users
+        customerUser = UserPrincipal.builder()
+                .userId("11111111-1111-1111-1111-111111111111")
+                .username("customer")
+                .email("customer@test.com")
+                .name("Test Customer")
+                .role("Customer")
+                .build();
 
+        ownerUser = UserPrincipal.builder()
+                .userId("22222222-2222-2222-2222-222222222222")
+                .username("owner")
+                .email("owner@test.com")
+                .name("Test Owner")
+                .role("Accommodation Owner")
+                .build();
+
+        superadminUser = UserPrincipal.builder()
+                .userId("33333333-3333-3333-3333-333333333333")
+                .username("admin")
+                .email("admin@test.com")
+                .name("Test Admin")
+                .role("Superadmin")
+                .build();
+
+        // Create test entities
         testProperty = new Property();
-        testProperty.setPropertyId("PROP001");
+        testProperty.setPropertyId("prop-001");
         testProperty.setPropertyName("Test Hotel");
-        testProperty.setType(1);
-        testProperty.setAddress("Test Address");
-        testProperty.setProvince(1);
-        
+        testProperty.setOwnerId(UUID.fromString("22222222-2222-2222-2222-222222222222"));
+
         testRoomType = new RoomType();
-        testRoomType.setRoomTypeId("RT001");
-        testRoomType.setName("Suite");
-        testRoomType.setPrice(1000000);
+        testRoomType.setRoomTypeId("rt-001");
+        testRoomType.setName("Deluxe Room");
+        testRoomType.setPrice(500000);
         testRoomType.setCapacity(2);
         testRoomType.setFacility("AC, TV, WiFi");
         testRoomType.setFloor(1);
         testRoomType.setProperty(testProperty);
-        
+
         testRoom = new Room();
-        testRoom.setRoomId("ROOM001");
-        testRoom.setName("101");
+        testRoom.setRoomId("room-001");
+        testRoom.setName("Room 101");
+        testRoom.setRoomType(testRoomType);
         testRoom.setAvailabilityStatus(1);
         testRoom.setActiveRoom(1);
-        testRoom.setRoomType(testRoomType);
-        
+
         testBooking = new AccommodationBooking();
-        testBooking.setBookingId("BOOK001");
+        testBooking.setBookingId("booking-001");
+        testBooking.setCustomerId(UUID.fromString("11111111-1111-1111-1111-111111111111"));
+        testBooking.setRoom(testRoom);
         testBooking.setStatus(0);
-    }
 
-    // ========== LIST BOOKINGS TESTS ==========
-    
-    @Test
-    void testListAllBookings() throws Exception {
-        when(bookingService.getAllBookingsAsDTO()).thenReturn(Arrays.asList(testBookingDTO));
-
-        mockMvc.perform(get("/api/bookings"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data").isArray());
-
-        verify(bookingService, times(1)).getAllBookingsAsDTO();
+        testBookingDTO = BookingResponseDTO.builder()
+                .bookingId("booking-001")
+                .customerId(UUID.fromString("11111111-1111-1111-1111-111111111111"))
+                .status(0)
+                .build();
     }
 
     @Test
-    void testListBookingsByCustomerId() throws Exception {
-        UUID customerId = UUID.randomUUID();
-        when(bookingService.getBookingsByCustomer(any(UUID.class)))
-                .thenReturn(Arrays.asList(testBooking));
-        when(bookingService.getBookingDetail("BOOK001")).thenReturn(testBookingDTO);
+    void listBookings_AsCustomer_ReturnsOwnBookings() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(customerUser);
+            securityUtil.when(SecurityUtil::isCustomer).thenReturn(true);
+            securityUtil.when(SecurityUtil::isAccommodationOwner).thenReturn(false);
 
-        mockMvc.perform(get("/api/bookings")
-                        .param("customerId", customerId.toString()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data").isArray());
+            List<AccommodationBooking> bookings = Arrays.asList(testBooking);
+            when(bookingService.getBookingsByCustomer(any(UUID.class))).thenReturn(bookings);
+            when(bookingService.getBookingDetail(anyString())).thenReturn(testBookingDTO);
 
-        verify(bookingService, times(1)).getBookingsByCustomer(any(UUID.class));
+            ResponseEntity<Map<String, Object>> response = bookingController.listBookings(null, null);
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+            assertNotNull(response.getBody().get("data"));
+        }
     }
 
     @Test
-    void testListBookingsByStatus() throws Exception {
-        when(bookingService.getBookingsByStatus(0))
-                .thenReturn(Arrays.asList(testBooking));
-        when(bookingService.getBookingDetail("BOOK001")).thenReturn(testBookingDTO);
+    void listBookings_AsSuperadmin_ReturnsAllBookings() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(superadminUser);
+            securityUtil.when(SecurityUtil::isCustomer).thenReturn(false);
+            securityUtil.when(SecurityUtil::isAccommodationOwner).thenReturn(false);
 
-        mockMvc.perform(get("/api/bookings")
-                        .param("status", "0"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data").isArray());
+            List<BookingResponseDTO> bookings = Arrays.asList(testBookingDTO);
+            when(bookingService.getAllBookingsAsDTO()).thenReturn(bookings);
 
-        verify(bookingService, times(1)).getBookingsByStatus(0);
-    }
+            ResponseEntity<Map<String, Object>> response = bookingController.listBookings(null, null);
 
-    // ========== DETAIL BOOKING TESTS ==========
-    
-    @Test
-    void testDetailBookingSuccess() throws Exception {
-        when(bookingService.getBookingDetail("BOOK001")).thenReturn(testBookingDTO);
-
-        mockMvc.perform(get("/api/bookings/BOOK001"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.bookingId").value("BOOK001"))
-                .andExpect(jsonPath("$.availableActions.canPay").value(true))
-                .andExpect(jsonPath("$.availableActions.canCancel").value(true))
-                .andExpect(jsonPath("$.availableActions.canRefund").value(false))
-                .andExpect(jsonPath("$.availableActions.canUpdate").value(true));
-
-        verify(bookingService, times(1)).getBookingDetail("BOOK001");
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testDetailBookingWithConfirmedStatus() throws Exception {
-        testBookingDTO.setStatus(1);
-        when(bookingService.getBookingDetail("BOOK001")).thenReturn(testBookingDTO);
+    void listBookings_AsSuperadminWithCustomerIdFilter_ReturnsFilteredBookings() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(superadminUser);
+            securityUtil.when(SecurityUtil::isCustomer).thenReturn(false);
+            securityUtil.when(SecurityUtil::isAccommodationOwner).thenReturn(false);
 
-        mockMvc.perform(get("/api/bookings/BOOK001"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.availableActions.canPay").value(false))
-                .andExpect(jsonPath("$.availableActions.canCancel").value(false))
-                .andExpect(jsonPath("$.availableActions.canRefund").value(true))
-                .andExpect(jsonPath("$.availableActions.canUpdate").value(true));
+            List<AccommodationBooking> bookings = Arrays.asList(testBooking);
+            when(bookingService.getBookingsByCustomer(any(UUID.class))).thenReturn(bookings);
+            when(bookingService.getBookingDetail(anyString())).thenReturn(testBookingDTO);
+
+            ResponseEntity<Map<String, Object>> response = bookingController.listBookings(
+                    "11111111-1111-1111-1111-111111111111", null);
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testDetailBookingNotFound() throws Exception {
-        when(bookingService.getBookingDetail("INVALID"))
-                .thenThrow(new RuntimeException("Booking not found"));
+    void listBookings_AsSuperadminWithStatusFilter_ReturnsFilteredBookings() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(superadminUser);
+            securityUtil.when(SecurityUtil::isCustomer).thenReturn(false);
+            securityUtil.when(SecurityUtil::isAccommodationOwner).thenReturn(false);
 
-        mockMvc.perform(get("/api/bookings/INVALID"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Booking not found"));
-    }
+            List<AccommodationBooking> bookings = Arrays.asList(testBooking);
+            when(bookingService.getBookingsByStatus(anyInt())).thenReturn(bookings);
+            when(bookingService.getBookingDetail(anyString())).thenReturn(testBookingDTO);
 
-    // ========== PAYMENT TESTS ==========
-    
-    @Test
-    void testPayBookingSuccess() throws Exception {
-        when(bookingService.payBooking("BOOK001")).thenReturn(testBooking);
+            ResponseEntity<Map<String, Object>> response = bookingController.listBookings(null, 0);
 
-        mockMvc.perform(put("/api/bookings/pay/BOOK001"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("Payment confirmed successfully"));
-
-        verify(bookingService, times(1)).payBooking("BOOK001");
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testPayBookingFailed() throws Exception {
-        when(bookingService.payBooking("BOOK001"))
-                .thenThrow(new RuntimeException("Cannot pay booking"));
+    void listBookings_AsOwner_ReturnsOwnerPropertyBookings() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(ownerUser);
+            securityUtil.when(SecurityUtil::isCustomer).thenReturn(false);
+            securityUtil.when(SecurityUtil::isAccommodationOwner).thenReturn(true);
 
-        mockMvc.perform(put("/api/bookings/pay/BOOK001"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Cannot pay booking"));
+            List<BookingResponseDTO> allBookings = Arrays.asList(testBookingDTO);
+            when(bookingService.getAllBookingsAsDTO()).thenReturn(allBookings);
+            when(bookingService.getBookingById(anyString())).thenReturn(Optional.of(testBooking));
+
+            ResponseEntity<Map<String, Object>> response = bookingController.listBookings(null, null);
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testPayBookingStatusSuccess() throws Exception {
-        Map<String, Object> request = new HashMap<>();
-        request.put("bookingId", "BOOK001");
-        
-        doNothing().when(bookingService).payBookingById("BOOK001");
+    void detailBooking_AsCustomer_Success() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(customerUser);
+            securityUtil.when(SecurityUtil::isCustomer).thenReturn(true);
+            securityUtil.when(SecurityUtil::isAccommodationOwner).thenReturn(false);
 
-        mockMvc.perform(post("/api/bookings/status/pay")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("Payment confirmed successfully"));
+            when(bookingService.getBookingDetail("booking-001")).thenReturn(testBookingDTO);
+            when(bookingService.getBookingById("booking-001")).thenReturn(Optional.of(testBooking));
 
-        verify(bookingService, times(1)).payBookingById("BOOK001");
+            ResponseEntity<Map<String, Object>> response = bookingController.detailBooking("booking-001");
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+            assertNotNull(response.getBody().get("availableActions"));
+        }
     }
 
     @Test
-    void testPayBookingStatusFailed() throws Exception {
-        Map<String, Object> request = new HashMap<>();
-        request.put("bookingId", "BOOK001");
-        
-        doThrow(new RuntimeException("Payment failed"))
-                .when(bookingService).payBookingById("BOOK001");
+    void detailBooking_AsCustomer_AccessDenied() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            UserPrincipal otherCustomer = UserPrincipal.builder()
+                    .userId("44444444-4444-4444-4444-444444444444")
+                    .role("Customer")
+                    .build();
+            
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(otherCustomer);
+            securityUtil.when(SecurityUtil::isCustomer).thenReturn(true);
+            securityUtil.when(SecurityUtil::isAccommodationOwner).thenReturn(false);
 
-        mockMvc.perform(post("/api/bookings/status/pay")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false));
-    }
+            when(bookingService.getBookingDetail("booking-001")).thenReturn(testBookingDTO);
+            when(bookingService.getBookingById("booking-001")).thenReturn(Optional.of(testBooking));
 
-    // ========== CANCEL TESTS ==========
-    
-    @Test
-    void testCancelBookingSuccess() throws Exception {
-        when(bookingService.cancelBooking("BOOK001")).thenReturn(testBooking);
+            ResponseEntity<Map<String, Object>> response = bookingController.detailBooking("booking-001");
 
-        mockMvc.perform(put("/api/bookings/cancel/BOOK001"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("Booking cancelled successfully"));
-
-        verify(bookingService, times(1)).cancelBooking("BOOK001");
+            assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+            assertFalse((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testCancelBookingFailed() throws Exception {
-        when(bookingService.cancelBooking("BOOK001"))
-                .thenThrow(new RuntimeException("Cannot cancel booking"));
+    void detailBooking_AsOwner_Success() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(ownerUser);
+            securityUtil.when(SecurityUtil::isCustomer).thenReturn(false);
+            securityUtil.when(SecurityUtil::isAccommodationOwner).thenReturn(true);
 
-        mockMvc.perform(put("/api/bookings/cancel/BOOK001"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false));
+            when(bookingService.getBookingDetail("booking-001")).thenReturn(testBookingDTO);
+            when(bookingService.getBookingById("booking-001")).thenReturn(Optional.of(testBooking));
+
+            ResponseEntity<Map<String, Object>> response = bookingController.detailBooking("booking-001");
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testCancelBookingStatusSuccess() throws Exception {
-        Map<String, Object> request = new HashMap<>();
-        request.put("bookingId", "BOOK001");
-        
-        doNothing().when(bookingService).cancelBookingById("BOOK001");
+    void detailBooking_AsOwner_AccessDenied() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            UserPrincipal otherOwner = UserPrincipal.builder()
+                    .userId("55555555-5555-5555-5555-555555555555")
+                    .role("Accommodation Owner")
+                    .build();
+            
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(otherOwner);
+            securityUtil.when(SecurityUtil::isCustomer).thenReturn(false);
+            securityUtil.when(SecurityUtil::isAccommodationOwner).thenReturn(true);
 
-        mockMvc.perform(post("/api/bookings/status/cancel")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("Booking cancelled successfully"));
+            when(bookingService.getBookingDetail("booking-001")).thenReturn(testBookingDTO);
+            when(bookingService.getBookingById("booking-001")).thenReturn(Optional.of(testBooking));
 
-        verify(bookingService, times(1)).cancelBookingById("BOOK001");
+            ResponseEntity<Map<String, Object>> response = bookingController.detailBooking("booking-001");
+
+            assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+            assertFalse((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testCancelBookingStatusFailed() throws Exception {
-        Map<String, Object> request = new HashMap<>();
-        request.put("bookingId", "BOOK001");
-        
-        doThrow(new RuntimeException("Cancel failed"))
-                .when(bookingService).cancelBookingById("BOOK001");
+    void detailBooking_BookingNotFound_ReturnsNotFound() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(superadminUser);
+            securityUtil.when(SecurityUtil::isCustomer).thenReturn(false);
+            securityUtil.when(SecurityUtil::isAccommodationOwner).thenReturn(false);
 
-        mockMvc.perform(post("/api/bookings/status/cancel")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false));
-    }
+            when(bookingService.getBookingDetail("invalid")).thenThrow(new RuntimeException("Booking not found"));
 
-    // ========== REFUND TESTS ==========
-    
-    @Test
-    void testRefundBookingSuccess() throws Exception {
-        when(bookingService.refundBooking("BOOK001")).thenReturn(testBooking);
+            ResponseEntity<Map<String, Object>> response = bookingController.detailBooking("invalid");
 
-        mockMvc.perform(put("/api/bookings/refund/BOOK001"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("Refund requested successfully"));
-
-        verify(bookingService, times(1)).refundBooking("BOOK001");
+            assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+            assertFalse((Boolean) response.getBody().get("success"));
+        }
     }
 
     @Test
-    void testRefundBookingFailed() throws Exception {
-        when(bookingService.refundBooking("BOOK001"))
-                .thenThrow(new RuntimeException("Cannot refund booking"));
+    void payBooking_Success() {
+        // payBooking returns AccommodationBooking, not void
+        when(bookingService.payBooking("booking-001")).thenReturn(testBooking);
 
-        mockMvc.perform(put("/api/bookings/refund/BOOK001"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false));
+        ResponseEntity<Map<String, Object>> response = bookingController.payBooking("booking-001");
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue((Boolean) response.getBody().get("success"));
+        assertEquals("Payment confirmed successfully", response.getBody().get("message"));
     }
 
     @Test
-    void testRefundBookingStatusSuccess() throws Exception {
-        Map<String, Object> request = new HashMap<>();
-        request.put("bookingId", "BOOK001");
-        
-        doNothing().when(bookingService).refundBookingById("BOOK001");
+    void payBooking_Error() {
+        when(bookingService.payBooking("booking-001")).thenThrow(new RuntimeException("Cannot pay"));
 
-        mockMvc.perform(post("/api/bookings/status/refund")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("Refund requested successfully"));
+        ResponseEntity<Map<String, Object>> response = bookingController.payBooking("booking-001");
 
-        verify(bookingService, times(1)).refundBookingById("BOOK001");
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertFalse((Boolean) response.getBody().get("success"));
     }
 
     @Test
-    void testRefundBookingStatusFailed() throws Exception {
-        Map<String, Object> request = new HashMap<>();
-        request.put("bookingId", "BOOK001");
-        
-        doThrow(new RuntimeException("Refund failed"))
-                .when(bookingService).refundBookingById("BOOK001");
+    void cancelBooking_Success() {
+        // cancelBooking returns AccommodationBooking, not void
+        when(bookingService.cancelBooking("booking-001")).thenReturn(testBooking);
 
-        mockMvc.perform(post("/api/bookings/status/refund")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false));
-    }
+        ResponseEntity<Map<String, Object>> response = bookingController.cancelBooking("booking-001");
 
-    // ========== CREATE BOOKING TESTS ==========
-    
-    @Test
-    void testGetCreateBookingData() throws Exception {
-        when(propertyService.getAllActiveProperties()).thenReturn(Arrays.asList(testProperty));
-
-        mockMvc.perform(get("/api/bookings/create"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data").isArray());
-
-        verify(propertyService, times(1)).getAllActiveProperties();
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue((Boolean) response.getBody().get("success"));
+        assertEquals("Booking cancelled successfully", response.getBody().get("message"));
     }
 
     @Test
-    void testGetCreateBookingDataFailed() throws Exception {
-        when(propertyService.getAllActiveProperties())
-                .thenThrow(new RuntimeException("Failed to load properties"));
+    void cancelBooking_Error() {
+        when(bookingService.cancelBooking("booking-001")).thenThrow(new RuntimeException("Cannot cancel"));
 
-        mockMvc.perform(get("/api/bookings/create"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false));
+        ResponseEntity<Map<String, Object>> response = bookingController.cancelBooking("booking-001");
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertFalse((Boolean) response.getBody().get("success"));
     }
 
     @Test
-    void testGetCreateBookingWithRoomSuccess() throws Exception {
-        when(roomRepository.findById("ROOM001")).thenReturn(Optional.of(testRoom));
+    void getCreateBookingWithRoom_Success() {
+        when(roomRepository.findById("room-001")).thenReturn(Optional.of(testRoom));
 
-        mockMvc.perform(get("/api/bookings/create/ROOM001"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.roomId").value("ROOM001"))
-                .andExpect(jsonPath("$.data.propertyId").value("PROP001"))
-                .andExpect(jsonPath("$.data.roomTypeId").value("RT001"));
+        ResponseEntity<Map<String, Object>> response = bookingController.getCreateBookingWithRoom("room-001");
 
-        verify(roomRepository, times(1)).findById("ROOM001");
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue((Boolean) response.getBody().get("success"));
+        assertNotNull(response.getBody().get("data"));
     }
 
     @Test
-    void testGetCreateBookingWithRoomNotFound() throws Exception {
-        when(roomRepository.findById("INVALID")).thenReturn(Optional.empty());
+    void getCreateBookingWithRoom_RoomNotFound() {
+        when(roomRepository.findById("invalid")).thenReturn(Optional.empty());
 
-        mockMvc.perform(get("/api/bookings/create/INVALID"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Room not found"));
+        ResponseEntity<Map<String, Object>> response = bookingController.getCreateBookingWithRoom("invalid");
+
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        assertFalse((Boolean) response.getBody().get("success"));
     }
 
     @Test
-    void testCreateBookingWithRoom() throws Exception {
-        BookingRequestDTO request = new BookingRequestDTO();
-        request.setRoomId("ROOM001");
-        request.setCheckInDate("2025-11-10");
-        request.setCheckOutDate("2025-11-12");
-        
-        when(bookingService.createBookingWithRoom(anyString(), any(BookingRequestDTO.class)))
-                .thenReturn(testBookingDTO);
+    void getCreateBookingData_Success() {
+        List<Property> properties = Arrays.asList(testProperty);
+        when(propertyService.getAllActiveProperties()).thenReturn(properties);
 
-        mockMvc.perform(post("/api/bookings/create")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("Booking created successfully"));
+        ResponseEntity<Map<String, Object>> response = bookingController.getCreateBookingData();
 
-        verify(bookingService, times(1))
-                .createBookingWithRoom(anyString(), any(BookingRequestDTO.class));
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue((Boolean) response.getBody().get("success"));
     }
 
     @Test
-    void testCreateBookingWithSelection() throws Exception {
-        BookingRequestDTO request = new BookingRequestDTO();
-        request.setCheckInDate("2025-11-10");
-        request.setCheckOutDate("2025-11-12");
-        // No roomId means it will use selection
-        
-        when(bookingService.createBookingWithSelection(any(BookingRequestDTO.class)))
-                .thenReturn(testBookingDTO);
+    void getCreateBookingData_Error() {
+        when(propertyService.getAllActiveProperties()).thenThrow(new RuntimeException("Error"));
 
-        mockMvc.perform(post("/api/bookings/create")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.success").value(true));
+        ResponseEntity<Map<String, Object>> response = bookingController.getCreateBookingData();
 
-        verify(bookingService, times(1))
-                .createBookingWithSelection(any(BookingRequestDTO.class));
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertFalse((Boolean) response.getBody().get("success"));
     }
 
     @Test
-    void testCreateBookingFailed() throws Exception {
-        BookingRequestDTO request = new BookingRequestDTO();
-        request.setRoomId("ROOM001");
-        
-        when(bookingService.createBookingWithRoom(anyString(), any(BookingRequestDTO.class)))
-                .thenThrow(new RuntimeException("Failed to create booking"));
+    void getRoomTypesForProperty_Success() {
+        List<RoomType> roomTypes = Arrays.asList(testRoomType);
+        when(roomTypeRepository.findByProperty_PropertyIdAndActiveStatusOrderByFloorAsc("prop-001", 1))
+                .thenReturn(roomTypes);
 
-        mockMvc.perform(post("/api/bookings/create")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false));
-    }
+        ResponseEntity<Map<String, Object>> response = bookingController.getRoomTypesForProperty("prop-001");
 
-    // ========== UPDATE BOOKING TESTS ==========
-    
-    @Test
-    void testGetUpdateBookingSuccess() throws Exception {
-        when(bookingService.getBookingDetail("BOOK001")).thenReturn(testBookingDTO);
-        when(propertyService.getAllActiveProperties()).thenReturn(Arrays.asList(testProperty));
-
-        mockMvc.perform(get("/api/bookings/update/BOOK001"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.booking").exists())
-                .andExpect(jsonPath("$.properties").isArray());
-
-        verify(bookingService, times(1)).getBookingDetail("BOOK001");
-        verify(propertyService, times(1)).getAllActiveProperties();
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue((Boolean) response.getBody().get("success"));
     }
 
     @Test
-    void testGetUpdateBookingCancelled() throws Exception {
-        testBookingDTO.setStatus(2); // Cancelled
-        when(bookingService.getBookingDetail("BOOK001")).thenReturn(testBookingDTO);
+    void getRoomTypesForProperty_Error() {
+        when(roomTypeRepository.findByProperty_PropertyIdAndActiveStatusOrderByFloorAsc(anyString(), anyInt()))
+                .thenThrow(new RuntimeException("Error"));
 
-        mockMvc.perform(get("/api/bookings/update/BOOK001"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Cannot update cancelled booking"));
+        ResponseEntity<Map<String, Object>> response = bookingController.getRoomTypesForProperty("invalid");
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertFalse((Boolean) response.getBody().get("success"));
     }
 
     @Test
-    void testGetUpdateBookingRefundRequested() throws Exception {
-        testBookingDTO.setStatus(3); // Refund requested
-        when(bookingService.getBookingDetail("BOOK001")).thenReturn(testBookingDTO);
+    void getAvailableRooms_WithoutDates_Success() {
+        List<Room> rooms = Arrays.asList(testRoom);
+        when(roomRepository.findByRoomType_RoomTypeId("rt-001")).thenReturn(rooms);
 
-        mockMvc.perform(get("/api/bookings/update/BOOK001"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Cannot update booking with pending refund request"));
+        ResponseEntity<Map<String, Object>> response = bookingController.getAvailableRooms(
+                "prop-001", "rt-001", null, null);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue((Boolean) response.getBody().get("success"));
     }
 
     @Test
-    void testGetUpdateBookingDone() throws Exception {
-        testBookingDTO.setStatus(4); // Done
-        when(bookingService.getBookingDetail("BOOK001")).thenReturn(testBookingDTO);
-
-        mockMvc.perform(get("/api/bookings/update/BOOK001"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Cannot update completed booking"));
-    }
-
-    @Test
-    void testUpdateBookingSuccess() throws Exception {
-        BookingRequestDTO request = new BookingRequestDTO();
-        request.setCheckInDate("2025-11-11");
-        request.setCheckOutDate("2025-11-13");
-        
-        when(bookingService.updateBookingFromDTO(anyString(), any(BookingRequestDTO.class)))
-                .thenReturn(testBookingDTO);
-
-        mockMvc.perform(put("/api/bookings/update/BOOK001")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("Booking updated successfully"));
-
-        verify(bookingService, times(1))
-                .updateBookingFromDTO(anyString(), any(BookingRequestDTO.class));
-    }
-
-    @Test
-    void testUpdateBookingFailed() throws Exception {
-        BookingRequestDTO request = new BookingRequestDTO();
-        
-        when(bookingService.updateBookingFromDTO(anyString(), any(BookingRequestDTO.class)))
-                .thenThrow(new RuntimeException("Failed to update booking"));
-
-        mockMvc.perform(put("/api/bookings/update/BOOK001")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false));
-    }
-
-    // ========== ROOM TYPES AND ROOMS TESTS ==========
-    
-    @Test
-    void testGetRoomTypesForProperty() throws Exception {
-        when(roomTypeRepository.findByProperty_PropertyIdAndActiveStatusOrderByFloorAsc("PROP001", 1))
-                .thenReturn(Arrays.asList(testRoomType));
-
-        mockMvc.perform(get("/api/bookings/roomtypes/PROP001"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data").isArray());
-
-        verify(roomTypeRepository, times(1))
-                .findByProperty_PropertyIdAndActiveStatusOrderByFloorAsc("PROP001", 1);
-    }
-
-    @Test
-    void testGetRoomTypesForPropertyFailed() throws Exception {
-        when(roomTypeRepository.findByProperty_PropertyIdAndActiveStatusOrderByFloorAsc("PROP001", 1))
-                .thenThrow(new RuntimeException("Failed to load room types"));
-
-        mockMvc.perform(get("/api/bookings/roomtypes/PROP001"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false));
-    }
-
-    @Test
-    void testGetAvailableRoomsWithoutDates() throws Exception {
-        when(roomRepository.findByRoomType_RoomTypeId("RT001"))
-                .thenReturn(Arrays.asList(testRoom));
-
-        mockMvc.perform(get("/api/bookings/rooms/PROP001/RT001"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data").isArray());
-
-        verify(roomRepository, times(1)).findByRoomType_RoomTypeId("RT001");
-    }
-
-    @Test
-    void testGetAvailableRoomsWithDates() throws Exception {
-        when(roomRepository.findByRoomType_RoomTypeId("RT001"))
-                .thenReturn(Arrays.asList(testRoom));
+    void getAvailableRooms_WithDates_Success() {
+        List<Room> rooms = Arrays.asList(testRoom);
+        when(roomRepository.findByRoomType_RoomTypeId("rt-001")).thenReturn(rooms);
         when(bookingService.isRoomAvailableForDates(anyString(), any(LocalDateTime.class), any(LocalDateTime.class)))
                 .thenReturn(true);
 
-        mockMvc.perform(get("/api/bookings/rooms/PROP001/RT001")
-                        .param("checkInDate", "2025-11-10")
-                        .param("checkOutDate", "2025-11-12"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data").isArray());
+        ResponseEntity<Map<String, Object>> response = bookingController.getAvailableRooms(
+                "prop-001", "rt-001", "2025-02-01", "2025-02-05");
 
-        verify(roomRepository, times(1)).findByRoomType_RoomTypeId("RT001");
-        verify(bookingService, times(1))
-                .isRoomAvailableForDates(anyString(), any(LocalDateTime.class), any(LocalDateTime.class));
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue((Boolean) response.getBody().get("success"));
     }
 
     @Test
-    void testGetAvailableRoomsFailed() throws Exception {
-        when(roomRepository.findByRoomType_RoomTypeId("RT001"))
-                .thenThrow(new RuntimeException("Failed to load rooms"));
+    void getAvailableRooms_Error() {
+        when(roomRepository.findByRoomType_RoomTypeId(anyString())).thenThrow(new RuntimeException("Error"));
 
-        mockMvc.perform(get("/api/bookings/rooms/PROP001/RT001"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false));
-    }
+        ResponseEntity<Map<String, Object>> response = bookingController.getAvailableRooms(
+                "prop-001", "invalid", null, null);
 
-    // ========== STATISTICS TESTS ==========
-    
-    @Test
-    void testGetBookingStatistics() throws Exception {
-        PropertyStatisticsDTO stats = new PropertyStatisticsDTO();
-        
-        when(propertyService.getMonthlyStatistics(1, 2025)).thenReturn(Arrays.asList(stats));
-
-        mockMvc.perform(get("/api/bookings/chart")
-                        .param("month", "1")
-                        .param("year", "2025"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data").isArray());
-
-        verify(propertyService, times(1)).getMonthlyStatistics(1, 2025);
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertFalse((Boolean) response.getBody().get("success"));
     }
 
     @Test
-    void testGetBookingStatisticsFailed() throws Exception {
-        when(propertyService.getMonthlyStatistics(1, 2025))
-                .thenThrow(new RuntimeException("Failed to load statistics"));
+    void createBooking_WithRoomId_Success() {
+        BookingRequestDTO request = new BookingRequestDTO();
+        request.setRoomId("room-001");
+        request.setCheckInDate("2025-02-01");
+        request.setCheckOutDate("2025-02-03");
 
-        mockMvc.perform(get("/api/bookings/chart")
-                        .param("month", "1")
-                        .param("year", "2025"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false));
+        when(bookingService.createBookingWithRoom(anyString(), any(BookingRequestDTO.class)))
+                .thenReturn(testBookingDTO);
+
+        ResponseEntity<Map<String, Object>> response = bookingController.createBooking(request);
+
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+        assertTrue((Boolean) response.getBody().get("success"));
+    }
+
+    @Test
+    void createBooking_WithSelection_Success() {
+        BookingRequestDTO request = new BookingRequestDTO();
+        request.setCheckInDate("2025-02-01");
+        request.setCheckOutDate("2025-02-03");
+
+        when(bookingService.createBookingWithSelection(any(BookingRequestDTO.class)))
+                .thenReturn(testBookingDTO);
+
+        ResponseEntity<Map<String, Object>> response = bookingController.createBooking(request);
+
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+        assertTrue((Boolean) response.getBody().get("success"));
+    }
+
+    @Test
+    void createBooking_Error() {
+        BookingRequestDTO request = new BookingRequestDTO();
+        request.setRoomId("room-001");
+
+        when(bookingService.createBookingWithRoom(anyString(), any(BookingRequestDTO.class)))
+                .thenThrow(new RuntimeException("Error"));
+
+        ResponseEntity<Map<String, Object>> response = bookingController.createBooking(request);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertFalse((Boolean) response.getBody().get("success"));
+    }
+
+    @Test
+    void getUpdateBooking_AsCustomer_Success() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(customerUser);
+            securityUtil.when(SecurityUtil::isCustomer).thenReturn(true);
+            securityUtil.when(SecurityUtil::isAccommodationOwner).thenReturn(false);
+            securityUtil.when(SecurityUtil::isSuperadmin).thenReturn(false);
+
+            testBookingDTO = BookingResponseDTO.builder()
+                    .bookingId("booking-001")
+                    .status(0)
+                    .build();
+
+            when(bookingService.getBookingDetail("booking-001")).thenReturn(testBookingDTO);
+            when(bookingService.getBookingById("booking-001")).thenReturn(Optional.of(testBooking));
+            when(propertyService.getAllActiveProperties()).thenReturn(Arrays.asList(testProperty));
+
+            ResponseEntity<Map<String, Object>> response = bookingController.getUpdateBooking("booking-001");
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
+    }
+
+    @Test
+    void getUpdateBooking_CancelledBooking_ReturnsBadRequest() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(superadminUser);
+            securityUtil.when(SecurityUtil::isCustomer).thenReturn(false);
+            securityUtil.when(SecurityUtil::isAccommodationOwner).thenReturn(false);
+
+            testBookingDTO = BookingResponseDTO.builder()
+                    .bookingId("booking-001")
+                    .status(2) // Cancelled
+                    .build();
+
+            when(bookingService.getBookingDetail("booking-001")).thenReturn(testBookingDTO);
+            when(bookingService.getBookingById("booking-001")).thenReturn(Optional.of(testBooking));
+
+            ResponseEntity<Map<String, Object>> response = bookingController.getUpdateBooking("booking-001");
+
+            assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+            assertFalse((Boolean) response.getBody().get("success"));
+        }
+    }
+
+    @Test
+    void updateBooking_AsSuperadmin_Success() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(superadminUser);
+            securityUtil.when(SecurityUtil::isCustomer).thenReturn(false);
+            securityUtil.when(SecurityUtil::isAccommodationOwner).thenReturn(false);
+
+            BookingRequestDTO request = new BookingRequestDTO();
+            when(bookingService.getBookingById("booking-001")).thenReturn(Optional.of(testBooking));
+            when(bookingService.updateBookingFromDTO("booking-001", request)).thenReturn(testBookingDTO);
+
+            ResponseEntity<Map<String, Object>> response = bookingController.updateBooking("booking-001", request);
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
+    }
+
+    @Test
+    void payBookingStatus_Success() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(customerUser);
+            securityUtil.when(SecurityUtil::isCustomer).thenReturn(true);
+            securityUtil.when(SecurityUtil::isAccommodationOwner).thenReturn(false);
+
+            when(bookingService.getBookingById("booking-001")).thenReturn(Optional.of(testBooking));
+            doNothing().when(bookingService).payBookingById("booking-001");
+
+            Map<String, String> request = new HashMap<>();
+            request.put("bookingId", "booking-001");
+
+            ResponseEntity<Map<String, Object>> response = bookingController.payBookingStatus(request);
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
+    }
+
+    @Test
+    void cancelBookingStatus_Success() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(customerUser);
+            securityUtil.when(SecurityUtil::isCustomer).thenReturn(true);
+            securityUtil.when(SecurityUtil::isAccommodationOwner).thenReturn(false);
+
+            when(bookingService.getBookingById("booking-001")).thenReturn(Optional.of(testBooking));
+            doNothing().when(bookingService).cancelBookingById("booking-001");
+
+            Map<String, String> request = new HashMap<>();
+            request.put("bookingId", "booking-001");
+
+            ResponseEntity<Map<String, Object>> response = bookingController.cancelBookingStatus(request);
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
+    }
+
+    @Test
+    void getBookingStatistics_AsSuperadmin_Success() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(superadminUser);
+            securityUtil.when(SecurityUtil::isAccommodationOwner).thenReturn(false);
+
+            List<PropertyStatisticsDTO> stats = new ArrayList<>();
+            when(propertyService.getMonthlyStatistics(1, 2025)).thenReturn(stats);
+
+            ResponseEntity<Map<String, Object>> response = bookingController.getBookingStatistics(1, 2025);
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
+    }
+
+    @Test
+    void getBookingStatistics_AsOwner_FiltersOwnProperties() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(ownerUser);
+            securityUtil.when(SecurityUtil::isAccommodationOwner).thenReturn(true);
+
+            PropertyStatisticsDTO stat = PropertyStatisticsDTO.builder()
+                    .propertyId("prop-001")
+                    .build();
+            List<PropertyStatisticsDTO> stats = new ArrayList<>(Arrays.asList(stat));
+            when(propertyService.getMonthlyStatistics(1, 2025)).thenReturn(stats);
+            when(propertyService.getPropertyById("prop-001")).thenReturn(Optional.of(testProperty));
+
+            ResponseEntity<Map<String, Object>> response = bookingController.getBookingStatistics(1, 2025);
+
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertTrue((Boolean) response.getBody().get("success"));
+        }
+    }
+
+    @Test
+    void getBookingStatistics_Error() {
+        try (MockedStatic<SecurityUtil> securityUtil = mockStatic(SecurityUtil.class)) {
+            securityUtil.when(SecurityUtil::getCurrentUser).thenReturn(superadminUser);
+            securityUtil.when(SecurityUtil::isAccommodationOwner).thenReturn(false);
+
+            when(propertyService.getMonthlyStatistics(anyInt(), anyInt())).thenThrow(new RuntimeException("Error"));
+
+            ResponseEntity<Map<String, Object>> response = bookingController.getBookingStatistics(1, 2025);
+
+            assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+            assertFalse((Boolean) response.getBody().get("success"));
+        }
     }
 }

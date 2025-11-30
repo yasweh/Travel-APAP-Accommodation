@@ -18,10 +18,7 @@ public interface MaintenanceRepository extends JpaRepository<Maintenance, Long> 
     List<Maintenance> findByRoom_RoomType_RoomTypeId(String roomTypeId);
     
     List<Maintenance> findByActiveStatus(Integer activeStatus);
-    
-    /**
-     * Check if maintenance schedule overlaps with existing maintenance
-     */
+
     @Query("SELECT COUNT(m) > 0 FROM Maintenance m WHERE m.room.roomId = :roomId " +
            "AND m.activeStatus = 1 " +
            "AND ((m.startDate < :endDate OR (m.startDate = :endDate AND m.startTime < :endTime)) " +
