@@ -208,11 +208,19 @@ public class SupportTicketService {
                 // Fetch booking to get propertyId
                 Object bookingData = externalBookingService.fetchBookingById(
                         ServiceSource.ACCOMMODATION, request.getExternalBookingId());
-                if (bookingData instanceof Map) {
+                        
+                if (bookingData instanceof apap.ti._5.accommodation_2306212083_be.dto.external.AccommodationBookingDTO dto) {
+                    String propertyId = dto.getPropertyId();
+                    log.info("Setting propertyId from AccommodationBookingDTO: {}", propertyId);
+                    ticket.setPropertyId(propertyId);
+                } else if (bookingData instanceof Map) {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> bookingMap = (Map<String, Object>) bookingData;
                     String propertyId = (String) bookingMap.get("propertyId");
+                    log.info("Setting propertyId from Map: {}", propertyId);
                     ticket.setPropertyId(propertyId);
+                } else {
+                    log.warn("Unknown booking data type: {}", bookingData != null ? bookingData.getClass().getName() : "null");
                 }
             } catch (Exception e) {
                 log.warn("Could not set propertyId for ticket: {}", e.getMessage());

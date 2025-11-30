@@ -46,12 +46,6 @@ public class AccommodationBookingDTO {
     @JsonProperty("isBreakfast")
     private Boolean isBreakfast;
     
-    @JsonProperty("refund")
-    private Integer refund;
-    
-    @JsonProperty("extraPay")
-    private Integer extraPay;
-    
     @JsonProperty("guests")
     private Integer guests;
     
@@ -63,6 +57,9 @@ public class AccommodationBookingDTO {
     
     @JsonProperty("propertyName")
     private String propertyName;
+    
+    @JsonProperty("propertyId")
+    private String propertyId;
     
     @JsonProperty("roomName")
     private String roomName;

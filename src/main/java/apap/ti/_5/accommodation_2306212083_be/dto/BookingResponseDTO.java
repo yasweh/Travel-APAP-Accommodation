@@ -43,9 +43,6 @@ public class BookingResponseDTO {
     private Boolean addOnBreakfast;
     private Integer capacity;
     
-    private Integer refund;
-    private Integer extraPay;
-    
     @JsonFormat(pattern="yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime createdDate;
     

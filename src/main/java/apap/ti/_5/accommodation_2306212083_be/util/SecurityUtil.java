@@ -41,10 +41,20 @@ public class SecurityUtil {
 
     /**
      * Check if current user has Superadmin role
+     * Checks for multiple possible role name variations
      */
     public static boolean isSuperadmin() {
         String role = getCurrentUserRole();
-        return "Superadmin".equals(role);
+        if (role == null) return false;
+        
+        // Check for various possible superadmin role names
+        String normalizedRole = role.toLowerCase().replace(" ", "").replace("_", "");
+        return normalizedRole.equals("superadmin") || 
+               normalizedRole.equals("super") ||
+               normalizedRole.equals("admin") ||
+               role.equalsIgnoreCase("Super Admin") ||
+               role.equalsIgnoreCase("SuperAdmin") ||
+               role.equalsIgnoreCase("SUPERADMIN");
     }
 
     /**

@@ -21,7 +21,7 @@ spring:
   
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: update
     show-sql: true
     properties:
       hibernate:
@@ -52,7 +52,7 @@ logging:
 # Profile Service Configuration
 profile:
   service:
-    base-url: https://2306219575-be.hafizmuh.site
+    base-url: http://2306219575-be.hafizmuh.site
     # For local development when external service is unavailable:
     mock-enabled: false
 

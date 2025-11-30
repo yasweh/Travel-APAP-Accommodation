@@ -15,6 +15,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -27,6 +28,21 @@ import java.util.List;
 @EnableMethodSecurity(prePostEnabled = true)
 @RequiredArgsConstructor
 public class SecurityConfig {
+
+    private static final List<String> ALLOWED_ORIGINS = Arrays.asList(
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://2306211660-be.hafizmuh.site",
+        "http://2306211660-fe.hafizmuh.site",
+        "http://2306212083-be.hafizmuh.site",
+        "http://2306212083-fe.hafizmuh.site",
+        "http://2306203236-be.hafizmuh.site",
+        "http://2306203236-fe.hafizmuh.site",
+        "http://2306240061-be.hafizmuh.site",
+        "http://2306240061-fe.hafizmuh.site",
+        "http://2306219575-be.hafizmuh.site",
+        "http://2306219575-fe.hafizmuh.site"
+    );
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
@@ -50,6 +66,16 @@ public class SecurityConfig {
                 .requestMatchers("/api/property", "/api/property/{id}").permitAll() // Public property listing
                 .requestMatchers("/api/reviews/**").permitAll() // Public reviews
                 
+                // Swagger UI & OpenAPI docs - publicly accessible
+                .requestMatchers(
+                    "/swagger-ui.html",
+                    "/swagger-ui/**",
+                    "/v3/api-docs/**",
+                    "/v3/api-docs.yaml",
+                    "/swagger-resources/**",
+                    "/webjars/**"
+                ).permitAll()
+                
                 // All other endpoints require authentication
                 .anyRequest().authenticated()
             )
@@ -63,7 +89,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(List.of("*")); // Allow all origins for development
+        configuration.setAllowedOrigins(ALLOWED_ORIGINS);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);

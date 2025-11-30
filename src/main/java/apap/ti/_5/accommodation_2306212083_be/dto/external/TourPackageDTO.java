@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * DTO for Tour Package from external service
- * Endpoint: GET https://2306219575-be.hafizmuh.site/api/package
+ * Endpoint: GET http://2306219575-be.hafizmuh.site/api/package/public/all
  * Response format: { status: 200, message: "...", timestamp: "...", data: [...] }
  */
 @Data
@@ -32,9 +32,6 @@ public class TourPackageDTO {
     @JsonProperty("price")
     private Long price;
     
-    @JsonProperty("totalPrice")
-    private Long totalPrice;
-    
     @JsonProperty("startDate")
     private String startDate;
     
@@ -44,9 +41,6 @@ public class TourPackageDTO {
     @JsonProperty("status")
     private String status;
     
-    @JsonProperty("destination")
-    private String destination;
-    
-    @JsonProperty("description")
-    private String description;
+    @JsonProperty("billId")
+    private String billId;
 }

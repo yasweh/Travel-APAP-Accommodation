@@ -14,6 +14,11 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -23,6 +28,8 @@ import java.util.stream.Collectors;
 
 /**
  * Service to handle external API calls to fetch booking data from 5 services
+ * 
+ * Follows the pattern from Insurance service for token forwarding
  */
 @Service
 @Slf4j
@@ -38,17 +45,63 @@ public class ExternalBookingService {
     }
     
     /**
-     * Create HTTP headers with Bearer authentication token
+     * Get the current JWT token from the request context
+     * Supports both Authorization header and JWT_TOKEN cookie
+     */
+    private String getCurrentToken() {
+        try {
+            ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attributes != null) {
+                HttpServletRequest request = attributes.getRequest();
+                
+                // Try Authorization header first
+                String authHeader = request.getHeader("Authorization");
+                if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                    log.info("✓ Found JWT token in Authorization header: {}...{}", 
+                        authHeader.substring(0, Math.min(25, authHeader.length())),
+                        authHeader.length() > 30 ? authHeader.substring(authHeader.length() - 10) : "");
+                    return authHeader;
+                }
+                
+                // Try JWT_TOKEN cookie
+                if (request.getCookies() != null) {
+                    for (Cookie cookie : request.getCookies()) {
+                        if ("JWT_TOKEN".equals(cookie.getName())) {
+                            String token = "Bearer " + cookie.getValue();
+                            log.info("✓ Found JWT token in JWT_TOKEN cookie: {}...{}", 
+                                token.substring(0, Math.min(25, token.length())),
+                                token.length() > 30 ? token.substring(token.length() - 10) : "");
+                            return token;
+                        }
+                    }
+                }
+                
+                log.warn("✗ No JWT token found in request (checked Authorization header and JWT_TOKEN cookie)");
+            } else {
+                log.warn("✗ No request context available - cannot get token");
+            }
+        } catch (Exception e) {
+            log.error("✗ Error getting current token: {}", e.getMessage());
+        }
+        return null;
+    }
+    
+    /**
+     * Create HTTP headers WITH JWT token for authenticated requests to external services
+     * This forwards the user's JWT token to external APIs
      */
     private HttpHeaders createAuthHeaders() {
         HttpHeaders headers = new HttpHeaders();
-        String token = SecurityUtil.getCurrentToken();
+        headers.setAccept(java.util.List.of(org.springframework.http.MediaType.APPLICATION_JSON));
+        
+        String token = getCurrentToken();
         if (token != null) {
-            headers.set("Authorization", "Bearer " + token);
-            log.debug("Added auth token to request headers");
+            headers.set("Authorization", token);
+            log.info(">>> Sending request WITH Authorization header");
         } else {
-            log.warn("No auth token available in security context");
+            log.warn(">>> Sending request WITHOUT Authorization header (no token available)");
         }
+        
         return headers;
     }
     
@@ -131,20 +184,43 @@ public class ExternalBookingService {
     // ========== Private methods for each service ==========
     
     private List<AccommodationBookingDTO> fetchAccommodationBookings(String baseUrl, UUID userId) {
+        log.info("========== FETCHING ACCOMMODATION BOOKINGS ==========");
+        log.info("Using LOCAL database (not external API)");
+        log.info("UserId filter: {}", userId);
+        
         try {
-            // USE LOCAL DATABASE instead of external API
-            log.info("Fetching accommodation bookings from LOCAL database");
-            
             List<AccommodationBooking> localBookings = accommodationBookingRepository.findAll();
+            log.info("Found {} total bookings in local database", localBookings.size());
             
-            // Convert to DTO format
-            return localBookings.stream()
+            // Convert to DTO format and filter by userId
+            List<AccommodationBookingDTO> result = localBookings.stream()
                 .filter(b -> b.getActiveStatus() == 1) // Only active bookings
                 .map(this::convertToAccommodationDTO)
                 .collect(Collectors.toList());
+            
+            log.info("After active filter: {} bookings", result.size());
+            
+            // Log first few bookings
+            for (int i = 0; i < Math.min(3, result.size()); i++) {
+                log.info("Booking[{}]: id={}, customerId={}, propertyId={}", 
+                    i, result.get(i).getBookingId(), result.get(i).getCustomerId(), result.get(i).getPropertyId());
+            }
+            
+            // Filter by userId if provided
+            if (userId != null) {
+                result = result.stream()
+                    .filter(b -> b.getCustomerId() != null && b.getCustomerId().equals(userId))
+                    .toList();
+                log.info("After userId filter: {} accommodation bookings", result.size());
+            }
+            
+            return result;
                 
         } catch (Exception e) {
-            log.error("Error fetching accommodation bookings from local DB: {}", e.getMessage());
+            log.error("!!! ERROR fetching accommodation bookings !!!");
+            log.error("Exception type: {}", e.getClass().getName());
+            log.error("Exception message: {}", e.getMessage());
+            e.printStackTrace();
             throw new ExternalServiceException("Failed to fetch accommodation bookings", e);
         }
     }
@@ -189,6 +265,7 @@ public class ExternalBookingService {
                 
                 if (booking.getRoom().getRoomType().getProperty() != null) {
                     dto.setPropertyName(booking.getRoom().getRoomType().getProperty().getPropertyName());
+                    dto.setPropertyId(booking.getRoom().getRoomType().getProperty().getPropertyId());
                 }
             }
         }
@@ -197,29 +274,67 @@ public class ExternalBookingService {
     }
     
     private List<InsurancePolicyDTO> fetchInsurancePolicies(String baseUrl, UUID userId) {
+        log.info("========== FETCHING INSURANCE POLICIES ==========");
+        log.info("URL: {}", baseUrl);
+        log.info("UserId filter: {}", userId);
+        
         try {
             HttpHeaders headers = createAuthHeaders();
             HttpEntity<String> entity = new HttpEntity<>(headers);
             
-            ResponseEntity<List<InsurancePolicyDTO>> response = restTemplate.exchange(
+            log.info("Making GET request to: {}", baseUrl);
+            
+            // Insurance API returns: { status: 200, message: "...", timestamp: "...", data: [...] }
+            ResponseEntity<InsuranceApiResponse> response = restTemplate.exchange(
                 baseUrl,
                 HttpMethod.GET,
                 entity,
-                new ParameterizedTypeReference<List<InsurancePolicyDTO>>() {}
+                InsuranceApiResponse.class
             );
             
-            List<InsurancePolicyDTO> policies = response.getBody();
+            log.info("Response status: {}", response.getStatusCode());
+            log.info("Response headers: {}", response.getHeaders());
             
-            // Filter by userId - DISABLED for debug
-            // if (policies != null && userId != null) {
-            //     return policies.stream()
-            //         .filter(p -> p.getUserId() != null && p.getUserId().equals(userId.toString()))
-            //         .toList();
-            // }
+            InsuranceApiResponse apiResponse = response.getBody();
+            log.info("Response body: {}", apiResponse);
             
-            return policies != null ? policies : Collections.emptyList();
+            if (apiResponse != null) {
+                log.info("API Response - status: {}, message: {}", apiResponse.getStatus(), apiResponse.getMessage());
+                if (apiResponse.getData() != null) {
+                    List<InsurancePolicyDTO> policies = apiResponse.getData();
+                    log.info("Received {} insurance policies from API", policies.size());
+                    
+                    // Log each policy for debugging
+                    for (int i = 0; i < Math.min(3, policies.size()); i++) {
+                        log.info("Policy[{}]: id={}, userId={}, status={}", 
+                            i, policies.get(i).getId(), policies.get(i).getUserId(), policies.get(i).getStatus());
+                    }
+                    
+                    // Filter by userId if provided
+                    if (userId != null) {
+                        policies = policies.stream()
+                            .filter(p -> p.getUserId() != null && p.getUserId().equals(userId.toString()))
+                            .toList();
+                        log.info("After userId filter: {} policies", policies.size());
+                    }
+                    
+                    return policies;
+                } else {
+                    log.warn("API response data is NULL");
+                }
+            } else {
+                log.warn("API response body is NULL");
+            }
+            
+            return Collections.emptyList();
+        } catch (org.springframework.web.client.HttpClientErrorException.Forbidden e) {
+            log.warn("Insurance API access denied (403 Forbidden) - user may not have permission");
+            return Collections.emptyList();
+        } catch (org.springframework.web.client.ResourceAccessException e) {
+            log.warn("Insurance API timeout or connection error: {}", e.getMessage());
+            return Collections.emptyList();
         } catch (Exception e) {
-            log.error("Error fetching insurance policies: {}", e.getMessage());
+            log.error("Error fetching insurance policies: {} - {}", e.getClass().getSimpleName(), e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -229,16 +344,17 @@ public class ExternalBookingService {
             HttpHeaders headers = createAuthHeaders();
             HttpEntity<String> entity = new HttpEntity<>(headers);
             
-            ResponseEntity<List<InsurancePolicyDTO>> response = restTemplate.exchange(
+            // Insurance API returns: { status: 200, message: "...", timestamp: "...", data: [...] }
+            ResponseEntity<InsuranceApiResponse> response = restTemplate.exchange(
                 baseUrl,
                 HttpMethod.GET,
                 entity,
-                new ParameterizedTypeReference<List<InsurancePolicyDTO>>() {}
+                InsuranceApiResponse.class
             );
             
-            List<InsurancePolicyDTO> policies = response.getBody();
-            if (policies != null) {
-                return policies.stream()
+            InsuranceApiResponse apiResponse = response.getBody();
+            if (apiResponse != null && apiResponse.getData() != null) {
+                return apiResponse.getData().stream()
                     .filter(p -> p.getId().equals(policyId) || p.getBookingId().equals(policyId))
                     .findFirst()
                     .orElse(null);
@@ -251,29 +367,53 @@ public class ExternalBookingService {
     }
     
     private List<FlightBookingDTO> fetchFlightBookings(String baseUrl, UUID userId) {
+        log.info("========== FETCHING FLIGHT BOOKINGS ==========");
+        log.info("URL: {}", baseUrl);
+        log.info("UserId filter: {}", userId);
+        
         try {
             HttpHeaders headers = createAuthHeaders();
             HttpEntity<String> entity = new HttpEntity<>(headers);
             
-            ResponseEntity<List<FlightBookingDTO>> response = restTemplate.exchange(
+            log.info("Making GET request to: {}", baseUrl);
+            
+            // Try to parse as wrapped response first (API returns object with data array)
+            ResponseEntity<FlightBookingApiResponse> response = restTemplate.exchange(
                 baseUrl,
                 HttpMethod.GET,
                 entity,
-                new ParameterizedTypeReference<List<FlightBookingDTO>>() {}
+                FlightBookingApiResponse.class
             );
             
-            List<FlightBookingDTO> bookings = response.getBody();
+            log.info("Response status: {}", response.getStatusCode());
             
-            // Filter by userId - DISABLED for debug
-            // if (bookings != null && userId != null) {
-            //     return bookings.stream()
-            //         .filter(b -> b.getUserId() != null && b.getUserId().equals(userId))
-            //         .toList();
-            // }
+            FlightBookingApiResponse apiResponse = response.getBody();
+            if (apiResponse != null && apiResponse.getData() != null) {
+                List<FlightBookingDTO> bookings = apiResponse.getData();
+                log.info("Received {} flight bookings from API", bookings.size());
+                
+                // Log first few bookings
+                for (int i = 0; i < Math.min(3, bookings.size()); i++) {
+                    log.info("Flight[{}]: id={}, userId={}", 
+                        i, bookings.get(i).getId(), bookings.get(i).getUserId());
+                }
+                
+                if (userId != null) {
+                    bookings = bookings.stream()
+                        .filter(b -> b.getUserId() != null && b.getUserId().equals(userId))
+                        .toList();
+                    log.info("After userId filter: {} flight bookings", bookings.size());
+                }
+                
+                return bookings;
+            }
             
-            return bookings != null ? bookings : Collections.emptyList();
+            return Collections.emptyList();
+        } catch (org.springframework.web.client.HttpClientErrorException.Forbidden e) {
+            log.warn("Flight API access denied (403 Forbidden) - user may not have permission");
+            return Collections.emptyList();
         } catch (Exception e) {
-            log.error("Error fetching flight bookings: {}", e.getMessage());
+            log.error("Error fetching flight bookings: {} - {}", e.getClass().getSimpleName(), e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -283,16 +423,16 @@ public class ExternalBookingService {
             HttpHeaders headers = createAuthHeaders();
             HttpEntity<String> entity = new HttpEntity<>(headers);
             
-            ResponseEntity<List<FlightBookingDTO>> response = restTemplate.exchange(
+            ResponseEntity<FlightBookingApiResponse> response = restTemplate.exchange(
                 baseUrl,
                 HttpMethod.GET,
                 entity,
-                new ParameterizedTypeReference<List<FlightBookingDTO>>() {}
+                FlightBookingApiResponse.class
             );
             
-            List<FlightBookingDTO> bookings = response.getBody();
-            if (bookings != null) {
-                return bookings.stream()
+            FlightBookingApiResponse apiResponse = response.getBody();
+            if (apiResponse != null && apiResponse.getData() != null) {
+                return apiResponse.getData().stream()
                     .filter(b -> b.getId().toString().equals(bookingId))
                     .findFirst()
                     .orElse(null);
@@ -305,29 +445,50 @@ public class ExternalBookingService {
     }
     
     private List<RentalVehicleDTO> fetchRentalVehicles(String baseUrl, UUID userId) {
+        log.info("========== FETCHING RENTAL VEHICLES ==========");
+        log.info("URL: {}", baseUrl);
+        log.info("UserId filter: {}", userId);
+        
         try {
             HttpHeaders headers = createAuthHeaders();
             HttpEntity<String> entity = new HttpEntity<>(headers);
             
-            ResponseEntity<List<RentalVehicleDTO>> response = restTemplate.exchange(
+            log.info("Making GET request to: {}", baseUrl);
+            
+            ResponseEntity<RentalVehicleApiResponse> response = restTemplate.exchange(
                 baseUrl,
                 HttpMethod.GET,
                 entity,
-                new ParameterizedTypeReference<List<RentalVehicleDTO>>() {}
+                RentalVehicleApiResponse.class
             );
             
-            List<RentalVehicleDTO> vehicles = response.getBody();
+            log.info("Response status: {}", response.getStatusCode());
             
-            // Filter by userId - DISABLED for debug
-            // if (vehicles != null && userId != null) {
-            //     return vehicles.stream()
-            //         .filter(v -> v.getUserId() != null && v.getUserId().equals(userId.toString()))
-            //         .toList();
-            // }
+            RentalVehicleApiResponse apiResponse = response.getBody();
+            List<RentalVehicleDTO> vehicles = apiResponse != null ? apiResponse.getData() : null;
+            log.info("Received {} rental vehicles from API", vehicles != null ? vehicles.size() : 0);
+            
+            if (vehicles != null && !vehicles.isEmpty()) {
+                // Log first few vehicles
+                for (int i = 0; i < Math.min(3, vehicles.size()); i++) {
+                    log.info("Vehicle[{}]: id={}, userId={}", 
+                        i, vehicles.get(i).getId(), vehicles.get(i).getUserId());
+                }
+                
+                if (userId != null) {
+                    vehicles = vehicles.stream()
+                        .filter(v -> v.getUserId() != null && v.getUserId().equals(userId.toString()))
+                        .toList();
+                    log.info("After userId filter: {} rental vehicles", vehicles.size());
+                }
+            }
             
             return vehicles != null ? vehicles : Collections.emptyList();
+        } catch (org.springframework.web.client.HttpClientErrorException.Forbidden e) {
+            log.warn("Rental API access denied (403 Forbidden) - user may not have permission");
+            return Collections.emptyList();
         } catch (Exception e) {
-            log.error("Error fetching rental vehicles: {}", e.getMessage());
+            log.error("Error fetching rental vehicles: {} - {}", e.getClass().getSimpleName(), e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -337,14 +498,15 @@ public class ExternalBookingService {
             HttpHeaders headers = createAuthHeaders();
             HttpEntity<String> entity = new HttpEntity<>(headers);
             
-            ResponseEntity<List<RentalVehicleDTO>> response = restTemplate.exchange(
+            ResponseEntity<RentalVehicleApiResponse> response = restTemplate.exchange(
                 baseUrl,
                 HttpMethod.GET,
                 entity,
-                new ParameterizedTypeReference<List<RentalVehicleDTO>>() {}
+                RentalVehicleApiResponse.class
             );
             
-            List<RentalVehicleDTO> vehicles = response.getBody();
+            RentalVehicleApiResponse apiResponse = response.getBody();
+            List<RentalVehicleDTO> vehicles = apiResponse != null ? apiResponse.getData() : null;
             if (vehicles != null) {
                 return vehicles.stream()
                     .filter(v -> v.getId().equals(vehicleId))
@@ -359,11 +521,15 @@ public class ExternalBookingService {
     }
     
     private List<TourPackageDTO> fetchTourPackages(String baseUrl, UUID userId) {
+        log.info("========== FETCHING TOUR PACKAGES ==========");
+        log.info("URL: {}", baseUrl);
+        log.info("UserId filter: {}", userId);
+        
         try {
             HttpHeaders headers = createAuthHeaders();
             HttpEntity<String> entity = new HttpEntity<>(headers);
             
-            log.info("Fetching tour packages from: {}", baseUrl);
+            log.info("Making GET request to: {}", baseUrl);
             
             // Tour Package API returns: { status: 200, message: "...", timestamp: "...", data: [...] }
             ResponseEntity<TourPackageApiResponse> response = restTemplate.exchange(
@@ -373,15 +539,45 @@ public class ExternalBookingService {
                 TourPackageApiResponse.class
             );
             
+            log.info("Response status: {}", response.getStatusCode());
+            
             TourPackageApiResponse apiResponse = response.getBody();
-            if (apiResponse != null && apiResponse.getData() != null) {
-                log.info("Received {} tour packages", apiResponse.getData().size());
-                return apiResponse.getData();
+            log.info("Response body: {}", apiResponse);
+            
+            if (apiResponse != null) {
+                log.info("API Response - status: {}, message: {}", apiResponse.getStatus(), apiResponse.getMessage());
+                if (apiResponse.getData() != null) {
+                    List<TourPackageDTO> packages = apiResponse.getData();
+                    log.info("Received {} tour packages from API", packages.size());
+                    
+                    // Log first few packages
+                    for (int i = 0; i < Math.min(3, packages.size()); i++) {
+                        log.info("Package[{}]: id={}, userId={}, name={}", 
+                            i, packages.get(i).getId(), packages.get(i).getUserId(), packages.get(i).getPackageName());
+                    }
+                    
+                    // Filter by userId if provided
+                    if (userId != null) {
+                        packages = packages.stream()
+                            .filter(p -> p.getUserId() != null && p.getUserId().equals(userId.toString()))
+                            .toList();
+                        log.info("After userId filter: {} tour packages", packages.size());
+                    }
+                    
+                    return packages;
+                } else {
+                    log.warn("API response data is NULL");
+                }
+            } else {
+                log.warn("API response body is NULL");
             }
             
             return Collections.emptyList();
+        } catch (org.springframework.web.client.HttpClientErrorException.Forbidden e) {
+            log.warn("Tour API access denied (403 Forbidden) - user may not have permission");
+            return Collections.emptyList();
         } catch (Exception e) {
-            log.error("Error fetching tour packages: {}", e.getMessage());
+            log.error("Error fetching tour packages: {} - {}", e.getClass().getSimpleName(), e.getMessage());
             return Collections.emptyList();
         }
     }

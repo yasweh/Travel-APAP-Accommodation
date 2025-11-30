@@ -7,8 +7,9 @@ public enum ServiceSource {
     ACCOMMODATION("accommodation", "http://2306212083-be.hafizmuh.site/api/bookings"),
     INSURANCE("insurance", "http://2306240061-be.hafizmuh.site/api/policy"),
     FLIGHT("flight", "http://2306211660-be.hafizmuh.site/api/booking"),
-    RENTAL("rental", "http://2306203236-be.hafizmuh.site/api/vehicle"),
-    TOUR("tour", "https://2306219575-be.hafizmuh.site/api/package");
+    RENTAL("rental", "http://2306203236-be.hafizmuh.site/api/bookings"),
+    TOUR("tour", "http://2306219575-be.hafizmuh.site/api/package/public/all"),
+    BILL("bill", "http://2306211660-be.hafizmuh.site/api/bill");
 
     private final String code;
     private final String apiUrl;

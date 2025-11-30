@@ -46,8 +46,8 @@ class ServiceSourceTest {
         assertEquals("http://2306212083-be.hafizmuh.site/api/bookings", ServiceSource.ACCOMMODATION.getApiUrl());
         assertEquals("http://2306240061-be.hafizmuh.site/api/policy", ServiceSource.INSURANCE.getApiUrl());
         assertEquals("http://2306211660-be.hafizmuh.site/api/booking", ServiceSource.FLIGHT.getApiUrl());
-        assertEquals("http://2306203236-be.hafizmuh.site/api/vehicle", ServiceSource.RENTAL.getApiUrl());
-        assertEquals("https://2306219575-be.hafizmuh.site/api/packages", ServiceSource.TOUR.getApiUrl());
+        assertEquals("http://2306203236-be.hafizmuh.site/api/bookings", ServiceSource.RENTAL.getApiUrl());
+        assertEquals("http://2306219575-be.hafizmuh.site/api/packages", ServiceSource.TOUR.getApiUrl());
     }
 
     @Test

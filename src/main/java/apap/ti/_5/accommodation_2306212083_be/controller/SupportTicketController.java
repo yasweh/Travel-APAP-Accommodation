@@ -232,29 +232,67 @@ public class SupportTicketController {
     /**
      * GET /api/support-tickets/bookings
      * Fetch available bookings for a user from external services
-     * Query params: serviceSource (required), userId (required)
+     * Query params: serviceSource (required), userId (optional - if null, Superadmin sees all)
+     * 
+     * Access Rules:
+     * - Superadmin: If userId is null/not provided, fetches ALL bookings (no filter)
+     * - Customer/Owner: Must provide their own userId for filtering
      */
     @GetMapping("/bookings")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<?>> getAvailableBookings(
             @RequestParam ServiceSource serviceSource,
-            @RequestParam UUID userId) {
+            @RequestParam(required = false) UUID userId) {
         
-        log.info("GET /api/support-tickets/bookings - serviceSource={}, userId={}", serviceSource, userId);
+        UserPrincipal currentUser = SecurityUtil.getCurrentUser();
+        String currentRole = currentUser.getRole();
+        boolean isSuperadmin = SecurityUtil.isSuperadmin();
         
-        List<?> bookings = supportTicketService.getAvailableBookings(serviceSource, userId);
+        log.info("GET /api/support-tickets/bookings - serviceSource={}, userId={}, currentUser={}, role={}, isSuperadmin={}", 
+                serviceSource, userId, currentUser.getUserId(), currentRole, isSuperadmin);
+        
+        // For Superadmin, allow null userId to get ALL bookings
+        // For other roles, use the provided userId or their own userId
+        UUID effectiveUserId = userId;
+        if (isSuperadmin && userId == null) {
+            log.info("Superadmin detected - fetching ALL bookings (no userId filter)");
+            effectiveUserId = null;
+        } else if (userId == null) {
+            // Non-superadmin without userId - use their own userId
+            effectiveUserId = UUID.fromString(currentUser.getUserId());
+            log.info("Non-superadmin without userId - using own userId: {}", effectiveUserId);
+        }
+        
+        log.info("Effective userId for query: {}", effectiveUserId);
+        
+        List<?> bookings = supportTicketService.getAvailableBookings(serviceSource, effectiveUserId);
         return ResponseEntity.ok(bookings);
     }
     
     /**
      * GET /api/support-tickets/dashboard
      * Get comprehensive dashboard data: all bookings from 5 external services + user's support tickets
-     * Query params: userId (required)
+     * Query params: userId (optional - if null, Superadmin sees all)
      */
     @GetMapping("/dashboard")
-    public ResponseEntity<SupportDashboardResponseDTO> getDashboard(@RequestParam UUID userId) {
-        log.info("GET /api/support-tickets/dashboard - userId={}", userId);
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<SupportDashboardResponseDTO> getDashboard(@RequestParam(required = false) UUID userId) {
+        UserPrincipal currentUser = SecurityUtil.getCurrentUser();
+        boolean isSuperadmin = SecurityUtil.isSuperadmin();
         
-        SupportDashboardResponseDTO dashboard = supportTicketService.getDashboardData(userId);
+        log.info("GET /api/support-tickets/dashboard - userId={}, currentUser={}, isSuperadmin={}", 
+                userId, currentUser.getUserId(), isSuperadmin);
+        
+        // For Superadmin, allow null userId to get ALL data
+        UUID effectiveUserId = userId;
+        if (isSuperadmin && userId == null) {
+            log.info("Superadmin detected - fetching ALL dashboard data");
+            effectiveUserId = null;
+        } else if (userId == null) {
+            effectiveUserId = UUID.fromString(currentUser.getUserId());
+        }
+        
+        SupportDashboardResponseDTO dashboard = supportTicketService.getDashboardData(effectiveUserId);
         return ResponseEntity.ok(dashboard);
     }
     

@@ -11,11 +11,13 @@ import apap.ti._5.accommodation_2306212083_be.repository.CustomerRepository;
 import apap.ti._5.accommodation_2306212083_be.repository.RoomRepository;
 import apap.ti._5.accommodation_2306212083_be.util.IdGenerator;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
@@ -25,6 +27,7 @@ import java.util.stream.Collectors;
 @Service
 @Transactional
 @RequiredArgsConstructor
+@Slf4j
 public class BookingServiceImpl implements BookingService {
 
     private final AccommodationBookingRepository bookingRepository;
@@ -33,6 +36,7 @@ public class BookingServiceImpl implements BookingService {
     private final PropertyService propertyService;
     private final MaintenanceService maintenanceService;
     private final IdGenerator idGenerator;
+    private final BillService billService;
 
     @Override
     public AccommodationBooking createBooking(AccommodationBooking booking) {
@@ -148,16 +152,16 @@ public class BookingServiceImpl implements BookingService {
         List<AccommodationBooking> bookingsToCheckIn = bookingRepository.findBookingsToCheckIn(today);
         
         for (AccommodationBooking booking : bookingsToCheckIn) {
-            // Update property income when booking is completed
+            // Update property income when guest checks in
             String propertyId = booking.getRoom().getRoomType().getProperty().getPropertyId();
             propertyService.updatePropertyIncome(propertyId, booking.getTotalPrice());
             
-            // Release room
+            // Release room after checkout
             Room room = booking.getRoom();
             room.setAvailabilityStatus(1);
             roomRepository.save(room);
             
-            // Keep status as Payment Confirmed (1), don't change to Done
+            // Status remains as Payment Confirmed (1)
             bookingRepository.save(booking);
         }
     }
@@ -282,6 +286,27 @@ public class BookingServiceImpl implements BookingService {
         room.setAvailabilityStatus(0);
         room.setUpdatedDate(LocalDateTime.now());
         roomRepository.save(room);
+        
+        // Create bill in external Bill service
+        try {
+            String propertyName = roomType.getProperty().getPropertyName();
+            String roomTypeName = roomType.getName();
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+            
+            billService.createBillForBooking(
+                request.getCustomerId().toString(),
+                saved.getBookingId(),
+                propertyName,
+                roomTypeName,
+                checkInDate.format(formatter),
+                checkOutDate.format(formatter),
+                totalPrice
+            );
+            log.info("Bill created successfully for booking {}", saved.getBookingId());
+        } catch (Exception e) {
+            // Log but don't fail the booking creation
+            log.error("Failed to create bill for booking {}: {}", saved.getBookingId(), e.getMessage());
+        }
         
         return mapToResponseDTO(saved);
     }
@@ -466,7 +491,7 @@ public class BookingServiceImpl implements BookingService {
         }
         
         // Check booking overlaps - only check active bookings (activeStatus = 1) with status 0 or 1
-        // Skip cancelled (2), refund (3), and done (4)
+        // Status: 0=Waiting for Payment, 1=Payment Confirmed, 2=Cancelled
         List<AccommodationBooking> roomBookings = bookingRepository.findByRoom_RoomId(room.getRoomId());
         for (AccommodationBooking booking : roomBookings) {
             // Skip cancelled bookings and inactive bookings

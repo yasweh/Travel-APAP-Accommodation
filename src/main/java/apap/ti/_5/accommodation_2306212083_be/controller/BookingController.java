@@ -2,6 +2,7 @@ package apap.ti._5.accommodation_2306212083_be.controller;
 
 import apap.ti._5.accommodation_2306212083_be.dto.BookingRequestDTO;
 import apap.ti._5.accommodation_2306212083_be.dto.BookingResponseDTO;
+import apap.ti._5.accommodation_2306212083_be.dto.PaymentCallbackDTO;
 import apap.ti._5.accommodation_2306212083_be.dto.PropertyStatisticsDTO;
 import apap.ti._5.accommodation_2306212083_be.dto.RoomDTO;
 import apap.ti._5.accommodation_2306212083_be.dto.UserPrincipal;
@@ -15,6 +16,7 @@ import apap.ti._5.accommodation_2306212083_be.repository.RoomRepository;
 import apap.ti._5.accommodation_2306212083_be.repository.RoomTypeRepository;
 import apap.ti._5.accommodation_2306212083_be.util.SecurityUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -30,6 +32,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/bookings")
 @RequiredArgsConstructor
+@Slf4j
 public class BookingController {
 
     private final BookingService bookingService;
@@ -142,11 +145,11 @@ public class BookingController {
             // Superadmin can see all
             
             // Determine available actions based on status
+            // Status: 0=Waiting for Payment, 1=Payment Confirmed, 2=Cancelled
             Map<String, Boolean> availableActions = new HashMap<>();
-            availableActions.put("canPay", booking.getStatus() == 0); // Waiting -> Confirm Payment
+            availableActions.put("canPay", booking.getStatus() == 0); // Waiting -> Pay via Bill Service
             availableActions.put("canCancel", booking.getStatus() == 0); // Waiting -> Cancel
-            availableActions.put("canRefund", booking.getStatus() == 1); // Confirmed -> Request Refund
-            availableActions.put("canUpdate", booking.getStatus() == 0 || booking.getStatus() == 1); // Can update if not done/cancelled
+            availableActions.put("canUpdate", booking.getStatus() == 0); // Can only update if waiting for payment
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -408,15 +411,12 @@ public class BookingController {
             }
             
             // Check if can be updated based on status
-            // Status 2=Cancelled, 3=Request Refund, 4=Done cannot be updated
+            // Status: 0=Waiting for Payment (can update), 1=Payment Confirmed (cannot update), 2=Cancelled (cannot update)
             if (booking.getStatus() == 2) {
                 throw new RuntimeException("Cannot update cancelled booking");
             }
-            if (booking.getStatus() == 3) {
-                throw new RuntimeException("Cannot update booking with pending refund request");
-            }
-            if (booking.getStatus() == 4) {
-                throw new RuntimeException("Cannot update completed booking");
+            if (booking.getStatus() == 1) {
+                throw new RuntimeException("Cannot update booking after payment is confirmed");
             }
             
             // Convert properties to simple DTOs to avoid Hibernate proxy issues
@@ -658,5 +658,89 @@ public class BookingController {
         Property property = roomType.getProperty();
         
         return property.getOwnerId().toString();
+    }
+
+    // ============ PAYMENT CALLBACK FROM BILL SERVICE ============
+
+    /**
+     * POST /api/bookings/pay/{id} - Payment callback from Bill service
+     * This endpoint is called by the external Bill service when a user confirms payment.
+     * It updates the booking status from "Waiting for Payment" (0) to "Payment Confirmed" (1).
+     * 
+     * This endpoint requires JWT authentication to verify the user is logged in.
+     * The Bill service should forward the user's JWT token in the Authorization header.
+     * 
+     * @param id Booking ID (serviceReferenceId from bill)
+     * @param callback Payment callback data containing bookingId and userId
+     * @return Success/failure response
+     */
+    @PostMapping("/pay/{id}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Map<String, Object>> paymentCallback(
+            @PathVariable String id,
+            @RequestBody PaymentCallbackDTO callback) {
+        
+        log.info("Received payment callback for booking {} from user {}", id, callback.getUserId());
+        
+        try {
+            // Validate that the booking ID matches
+            if (callback.getBookingId() != null && !callback.getBookingId().equals(id)) {
+                log.warn("Booking ID mismatch: path={}, body={}", id, callback.getBookingId());
+            }
+            
+            // Get booking and validate
+            AccommodationBooking booking = bookingService.getBookingById(id)
+                .orElseThrow(() -> new RuntimeException("Booking not found: " + id));
+            
+            // Validate that the user making the payment owns the booking
+            if (callback.getUserId() != null) {
+                UUID payingUserId = UUID.fromString(callback.getUserId());
+                if (!booking.getCustomerId().equals(payingUserId)) {
+                    log.warn("User {} attempted to pay for booking {} owned by {}", 
+                        callback.getUserId(), id, booking.getCustomerId());
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "You can only pay for your own bookings");
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+                }
+            }
+            
+            // Check if booking is in correct status
+            if (booking.getStatus() != 0) {
+                String statusMessage = switch (booking.getStatus()) {
+                    case 1 -> "Booking is already paid";
+                    case 2 -> "Booking has been cancelled";
+                    default -> "Booking cannot be paid in current status";
+                };
+                
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", statusMessage);
+                response.put("currentStatus", booking.getStatus());
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+            
+            // Process payment - update status to confirmed
+            bookingService.payBookingById(id);
+            
+            log.info("Payment confirmed for booking {} by user {}", id, callback.getUserId());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Payment confirmed successfully");
+            response.put("bookingId", id);
+            response.put("newStatus", 1);
+            response.put("newStatusString", "Payment Confirmed");
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            log.error("Error processing payment callback for booking {}: {}", id, e.getMessage());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
     }
 }

@@ -82,7 +82,7 @@ class ProfileClientTest {
     @Test
     void constructor_InitializesWithBaseUrl() {
         // Should not throw exception when creating client
-        ProfileClient client = new ProfileClient("https://example.com");
+        ProfileClient client = new ProfileClient("http://example.com");
         
         assertNotNull(client);
     }
@@ -90,7 +90,7 @@ class ProfileClientTest {
     @Test
     void constructor_InitializesWithDefaultUrl() {
         // Should not throw exception when creating client with default URL pattern
-        ProfileClient client = new ProfileClient("https://2306219575-be.hafizmuh.site");
+        ProfileClient client = new ProfileClient("http://2306219575-be.hafizmuh.site");
         
         assertNotNull(client);
     }

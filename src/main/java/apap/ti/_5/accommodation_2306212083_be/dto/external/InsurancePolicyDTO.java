@@ -6,12 +6,12 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.Date;
 import java.util.List;
 
 /**
  * DTO for Insurance Policy from external service
  * Endpoint: GET http://2306240061-be.hafizmuh.site/api/policy
+ * Response format: { status, message, timestamp, data: [...] }
  */
 @Data
 @NoArgsConstructor
@@ -29,10 +29,10 @@ public class InsurancePolicyDTO {
     private String userId;
     
     @JsonProperty("startDate")
-    private Date startDate;
+    private String startDate;
     
     @JsonProperty("service")
-    private String service;  // Enum as String
+    private String service;  // ACCOMMODATION, FLIGHT, etc.
     
     @JsonProperty("totalPrice")
     private Integer totalPrice;
@@ -41,8 +41,42 @@ public class InsurancePolicyDTO {
     private Integer totalCoverage;
     
     @JsonProperty("status")
-    private String status;
+    private String status;  // CREATED, ACTIVE, etc.
     
-    @JsonProperty("listOrderedPlan")
-    private List<Object> listOrderedPlan;  // Generic list for flexibility
+    @JsonProperty("orderedPlans")
+    private List<OrderedPlanDTO> orderedPlans;
+    
+    @JsonProperty("createdAt")
+    private String createdAt;
+    
+    @JsonProperty("updatedAt")
+    private String updatedAt;
+    
+    /**
+     * Nested DTO for ordered insurance plans
+     */
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class OrderedPlanDTO {
+        private String id;
+        private String status;
+        private String expiredDate;
+        private InsurancePlanDTO insurancePlan;
+        private Integer claimsCount;
+    }
+    
+    /**
+     * Nested DTO for insurance plan details
+     */
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class InsurancePlanDTO {
+        private String id;
+        private String planName;
+        private Integer price;
+    }
 }

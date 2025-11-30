@@ -27,7 +27,7 @@ public class ProfileClient {
     private static final Logger logger = LoggerFactory.getLogger(ProfileClient.class);
     private final WebClient webClient;
 
-    public ProfileClient(@Value("${profile.service.base-url:https://2306219575-be.hafizmuh.site}") String baseUrl) {
+    public ProfileClient(@Value("${profile.service.base-url:://2306219575-be.hafizmuh.site}") String baseUrl) {
         logger.info("Initializing ProfileClient with base URL: {}", baseUrl);
 
         // Configure HttpClient to trust all certificates (INSECURE - FOR DEV ONLY)

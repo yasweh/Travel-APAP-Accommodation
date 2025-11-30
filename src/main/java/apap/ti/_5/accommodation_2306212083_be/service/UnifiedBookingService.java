@@ -34,7 +34,7 @@ public class UnifiedBookingService {
     
     // External service URLs
     private static final String TOUR_API = "http://2306219575-be.hafizmuh.site/api/package";
-    private static final String RENTAL_API = "http://2306203236-be.hafizmuh.site/api/vehicle/";
+    private static final String RENTAL_API = "http://2306203236-be.hafizmuh.site/api/bookings/";
     private static final String INSURANCE_API = "http://2306240061-be.hafizmuh.site/api/policy";
     private static final String ACCOMMODATION_API = "http://2306212083-be.hafizmuh.site/api/bookings";
     private static final String FLIGHT_API = "http://2306211660-be.hafizmuh.site/api/booking";
