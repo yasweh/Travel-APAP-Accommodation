@@ -1,8 +1,11 @@
 <template>
   <div class="support-tickets-container">
     <div class="page-header">
-      <h1>Support Tickets</h1>
-      <button class="btn btn-primary" @click="showCreateTicketModal = true">
+      <div class="header-left">
+        <h1>{{ pageTitle }}</h1>
+        <p class="page-subtitle">{{ pageSubtitle }}</p>
+      </div>
+      <button v-if="isCustomer" class="btn btn-primary" @click="showCreateTicketModal = true">
         Create New Ticket
       </button>
     </div>
@@ -35,8 +38,9 @@
     <!-- Tickets List -->
     <div v-if="!loading && !error" class="tickets-list">
       <div v-if="tickets.length === 0" class="no-tickets">
-        <p>No support tickets found.</p>
-        <button class="btn btn-primary" @click="showCreateTicketModal = true">
+        <p v-if="isCustomer">No support tickets found.</p>
+        <p v-else>No support tickets to manage.</p>
+        <button v-if="isCustomer" class="btn btn-primary" @click="showCreateTicketModal = true">
           Create Your First Ticket
         </button>
       </div>
@@ -50,6 +54,11 @@
         </div>
 
         <div class="ticket-info">
+          <!-- Show ticket creator for admin/owner -->
+          <div v-if="!isCustomer && ticket.customerName" class="info-row">
+            <span class="label">Customer:</span>
+            <span class="value">{{ ticket.customerName }}</span>
+          </div>
           <div class="info-row">
             <span class="label">Service:</span>
             <span class="value">{{ ticket.serviceSource }}</span>
@@ -57,6 +66,10 @@
           <div class="info-row">
             <span class="label">Booking ID:</span>
             <span class="value">{{ ticket.externalBookingId }}</span>
+          </div>
+          <div v-if="ticket.propertyName" class="info-row">
+            <span class="label">Property:</span>
+            <span class="value">{{ ticket.propertyName }}</span>
           </div>
           <div class="info-row">
             <span class="label">Created:</span>
@@ -72,7 +85,7 @@
             View Details
           </button>
           <button
-            v-if="ticket.status === 'OPEN'"
+            v-if="ticket.status === 'OPEN' && isCustomer"
             class="btn btn-danger"
             @click="deleteTicket(ticket.id)"
           >
@@ -92,12 +105,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import supportTicketService, { type TicketResponse } from '@/services/supportTicketService'
 import CreateTicketModal from '@/components/support/CreateTicketModal.vue'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
 // State
 const tickets = ref<TicketResponse[]>([])
@@ -109,14 +124,31 @@ const showCreateTicketModal = ref(false)
 const filterStatus = ref('')
 const filterServiceSource = ref('')
 
-// Mock user ID (in real app, get from auth store/session)
-const currentUserId = ref('263d012e-b86a-4813-be96-41e6da78e00d') // John Doe from seeder
+// Auth info
+const currentUserId = computed(() => authStore.user?.id || '')
+const isCustomer = computed(() => authStore.isCustomer)
+const isSuperadmin = computed(() => authStore.isSuperadmin)
+const isAccommodationOwner = computed(() => authStore.isAccommodationOwner)
+
+// Page title based on role
+const pageTitle = computed(() => {
+  if (isSuperadmin.value) return 'All Support Tickets'
+  if (isAccommodationOwner.value) return 'Property Support Tickets'
+  return 'My Support Tickets'
+})
+
+const pageSubtitle = computed(() => {
+  if (isSuperadmin.value) return 'Manage all support tickets in the system'
+  if (isAccommodationOwner.value) return 'Manage support tickets for your properties'
+  return 'View and manage your support requests'
+})
 
 // Fetch tickets
 const fetchTickets = async () => {
   loading.value = true
   error.value = ''
   try {
+    // Backend handles filtering based on authenticated user's role
     const response = await supportTicketService.getAllTickets(
       currentUserId.value,
       filterStatus.value || undefined,
@@ -136,7 +168,7 @@ const viewTicketDetail = (ticketId: string) => {
   router.push({ name: 'support-ticket-detail', params: { id: ticketId } })
 }
 
-// Delete ticket
+// Delete ticket (customers only)
 const deleteTicket = async (ticketId: string) => {
   if (!confirm('Are you sure you want to delete this ticket?')) {
     return
@@ -182,8 +214,20 @@ onMounted(() => {
   margin-bottom: 30px;
 }
 
+.header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
 .page-header h1 {
   font-size: 28px;
+  margin: 0;
+}
+
+.page-subtitle {
+  color: #666;
+  font-size: 14px;
   margin: 0;
 }
 

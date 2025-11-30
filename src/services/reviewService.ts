@@ -41,7 +41,14 @@ export const reviewService = {
   },
 
   /**
-   * Get all reviews by a customer
+   * Get all reviews by authenticated customer (my reviews)
+   */
+  getMyReviews() {
+    return api.get<ReviewResponse[]>('/reviews/my-reviews')
+  },
+
+  /**
+   * Get all reviews by a customer (admin only)
    */
   getReviewsByCustomer(customerId: string) {
     return api.get<ReviewResponse[]>('/reviews/customer', {

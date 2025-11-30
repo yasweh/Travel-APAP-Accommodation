@@ -116,6 +116,12 @@ const router = createRouter({
       component: () => import('../views/review/ReviewListView.vue'),
     },
     {
+      path: '/reviews/create',
+      name: 'review-create',
+      component: () => import('../views/review/ReviewFormView.vue'),
+      meta: { requiresAuth: true, roles: ['Customer'] }
+    },
+    {
       path: '/reviews/:reviewId',
       name: 'review-detail',
       component: () => import('../views/review/ReviewDetailView.vue'),

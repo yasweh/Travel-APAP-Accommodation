@@ -18,6 +18,9 @@ export interface TicketResponse {
   status: string
   serviceSource: string
   externalBookingId: string
+  propertyId?: string
+  propertyName?: string
+  customerName?: string
   createdAt: string
   updatedAt: string
   unreadMessagesCount: number

@@ -111,8 +111,10 @@ const handleLogin = async () => {
 
 .login-page {
   display: flex;
+  height: 100vh;
   min-height: 100vh;
   background: #fff;
+  overflow: hidden;
 }
 
 /* Left Column - Image */

@@ -8,8 +8,6 @@
       <ul>
         <li>✅ You can update: Check-in/out dates, Capacity, Breakfast, and Customer information</li>
         <li>🔒 You cannot change: Property, Room Type, or Room</li>
-        <li>💰 If total amount increases → Extra payment required (status: Waiting for Payment)</li>
-        <li>💵 If total amount decreases → Refund will be processed (status: Request Refund)</li>
       </ul>
     </div>
 
@@ -486,20 +484,11 @@ const submitForm = async () => {
 
     const response = await bookingService.update(bookingId, bookingData)
     if (response.success) {
-      const updatedBooking = response.data
-      
-      // Check for extra payment or refund
-      if (updatedBooking.extraPay > 0) {
-        successMessage.value = `Booking updated successfully! Total price increased. Extra payment required: Rp${formatCurrency(updatedBooking.extraPay)}. Status changed to "Waiting for Payment".`
-      } else if (updatedBooking.refund > 0) {
-        successMessage.value = `Booking updated successfully! Total price decreased. Refund amount: Rp${formatCurrency(updatedBooking.refund)}. Status changed to "Request Refund".`
-      } else {
-        successMessage.value = 'Booking updated successfully!'
-      }
+      successMessage.value = 'Booking updated successfully!'
       
       setTimeout(() => {
         router.push('/booking')
-      }, 3000) // Extended to 3 seconds to read message
+      }, 2000)
     } else {
       error.value = response.message
     }

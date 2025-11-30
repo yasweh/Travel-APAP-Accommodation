@@ -20,8 +20,6 @@ export interface BookingResponseDTO {
   customerPhone: string
   addOnBreakfast: boolean
   capacity: number
-  refund: number
-  extraPay: number
   createdAt?: string
   updatedAt?: string
 }
@@ -30,7 +28,6 @@ export interface BookingDetailDTO extends BookingResponseDTO {
   availableActions?: {
     canPay: boolean
     canCancel: boolean
-    canRefund: boolean
     canUpdate: boolean
   }
 }
@@ -88,7 +85,6 @@ export const bookingService = {
       availableActions?: {
         canPay: boolean
         canCancel: boolean
-        canRefund: boolean
         canUpdate: boolean
       }
     }>(`/bookings/${id}`)
@@ -178,15 +174,6 @@ export const bookingService = {
   async cancel(bookingId: string) {
     const response = await api.post<{ success: boolean; message: string }>(
       '/bookings/status/cancel',
-      { bookingId }
-    )
-    return response.data
-  },
-
-  // Process refund
-  async refund(bookingId: string) {
-    const response = await api.post<{ success: boolean; message: string }>(
-      '/bookings/status/refund',
       { bookingId }
     )
     return response.data

@@ -274,23 +274,6 @@ const cancelBooking = async (bookingId: string) => {
   }
 }
 
-const refundBooking = async (bookingId: string) => {
-  if (!confirm('Process refund for this booking?')) return
-
-  try {
-    const response = await bookingService.refund(bookingId)
-    if (response.success) {
-      alert('Refund processed successfully!')
-      loadBookings()
-    } else {
-      alert(response.message)
-    }
-  } catch (err: any) {
-    alert(err.response?.data?.message || 'Failed to process refund')
-    console.error('Refund error:', err)
-  }
-}
-
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('id-ID').format(value)
 }
@@ -310,9 +293,7 @@ const getStatusClass = (status: number) => {
     case 1:
       return 'status-confirmed'
     case 2:
-      return 'status-done'
-    case 3:
-      return 'status-refunded'
+      return 'status-cancelled'
     default:
       return ''
   }
@@ -550,14 +531,14 @@ onMounted(() => {
   color: #1976D2;
 }
 
-.status-done {
+.status-confirmed {
   background: #E8F5E9;
   color: #2E7D32;
 }
 
-.status-refunded {
-  background: #F3E5F5;
-  color: #7B1FA2;
+.status-cancelled {
+  background: #FFEBEE;
+  color: #C62828;
 }
 
 .card-body {

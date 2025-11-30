@@ -247,8 +247,8 @@
             </div>
           </div>
 
-          <!-- Add Progress Form -->
-          <div v-if="ticket.status !== 'CLOSED'" class="add-progress-section">
+          <!-- Add Progress Form - Only visible for admin/owner -->
+          <div v-if="canAddProgress" class="add-progress-section">
             <h3 class="section-title">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                 <path d="M10 0C4.48 0 0 4.48 0 10C0 15.52 4.48 20 10 20C15.52 20 20 15.52 20 10C20 4.48 15.52 0 10 0ZM15 11H11V15H9V11H5V9H9V5H11V9H15V11Z" fill="#7C6A46"/>
@@ -285,12 +285,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import supportTicketService, { type TicketDetailResponse } from '@/services/supportTicketService'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
+
+// Role-based computed properties
+const isCustomer = computed(() => authStore.user?.role === 'Customer')
+const canAddProgress = computed(() => !isCustomer.value && ticket.value?.status !== 'CLOSED')
 
 // State
 const ticket = ref<TicketDetailResponse | null>(null)
@@ -304,8 +310,8 @@ const addingProgress = ref(false)
 const unreadCount = ref(0)
 const messagesContainer = ref<HTMLElement | null>(null)
 
-// Mock user ID (John Doe from seeder)
-const currentUserId = ref('263d012e-b86a-4813-be96-41e6da78e00d')
+// Use auth store for current user ID
+const currentUserId = computed(() => authStore.user?.id || '')
 
 // Fetch ticket detail
 const fetchTicketDetail = async () => {
@@ -334,6 +340,13 @@ const fetchTicketDetail = async () => {
   }
 }
 
+// Get sender type based on user role
+const getSenderType = () => {
+  if (authStore.user?.role === 'Superadmin') return 'ADMIN'
+  if (authStore.user?.role === 'Accommodation Owner') return 'ADMIN'
+  return 'CUSTOMER'
+}
+
 // Send message
 const sendMessage = async () => {
   if (!newMessage.value.trim() || !ticket.value) return
@@ -342,7 +355,7 @@ const sendMessage = async () => {
   try {
     await supportTicketService.addMessage(ticket.value.id, {
       senderId: currentUserId.value,
-      senderType: 'CUSTOMER',
+      senderType: getSenderType(),
       message: newMessage.value.trim(),
     })
 

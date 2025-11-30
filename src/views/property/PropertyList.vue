@@ -23,6 +23,60 @@
       <span>{{ error }}</span>
     </div>
 
+    <!-- Filters -->
+    <div class="filters-section">
+      <div class="filters">
+        <div class="filter-group">
+          <label for="filter-name">Property Name</label>
+          <input 
+            id="filter-name"
+            v-model="filterName" 
+            type="text" 
+            placeholder="Search by name..." 
+            class="filter-input"
+            @input="loadProperties"
+          />
+        </div>
+        
+        <div class="filter-group">
+          <label for="filter-type">Property Type</label>
+          <select 
+            id="filter-type"
+            v-model="filterType" 
+            class="filter-select"
+            @change="loadProperties"
+          >
+            <option value="">All Types</option>
+            <option value="0">Hotel</option>
+            <option value="1">Villa</option>
+            <option value="2">Apartemen</option>
+          </select>
+        </div>
+        
+        <div class="filter-group">
+          <label for="filter-province">Province</label>
+          <select 
+            id="filter-province"
+            v-model="filterProvince" 
+            class="filter-select"
+            @change="loadProperties"
+          >
+            <option value="">All Provinces</option>
+            <option v-for="(province, index) in provinces" :key="index" :value="index">
+              {{ province }}
+            </option>
+          </select>
+        </div>
+        
+        <button @click="clearFilters" class="btn-clear-filters">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z" fill="currentColor"/>
+          </svg>
+          Clear Filters
+        </button>
+      </div>
+    </div>
+
     <!-- Actions -->
     <div class="actions">
       <button @click="goToCreateProperty" class="btn-primary">
@@ -162,11 +216,35 @@ const properties = ref<Property[]>([])
 const loading = ref(false)
 const error = ref('')
 
+// Filter states
+const filterName = ref('')
+const filterType = ref('')
+const filterProvince = ref('')
+
+// Province mapping (0-33 for Indonesian provinces)
+const provinces = [
+  'Aceh', 'Sumatera Utara', 'Sumatera Barat', 'Riau', 'Jambi', 
+  'Sumatera Selatan', 'Bengkulu', 'Lampung', 'Kepulauan Bangka Belitung', 
+  'Kepulauan Riau', 'DKI Jakarta', 'Jawa Barat', 'Jawa Tengah', 
+  'DI Yogyakarta', 'Jawa Timur', 'Banten', 'Bali', 'Nusa Tenggara Barat', 
+  'Nusa Tenggara Timur', 'Kalimantan Barat', 'Kalimantan Tengah', 
+  'Kalimantan Selatan', 'Kalimantan Timur', 'Kalimantan Utara', 
+  'Sulawesi Utara', 'Sulawesi Tengah', 'Sulawesi Selatan', 
+  'Sulawesi Tenggara', 'Gorontalo', 'Sulawesi Barat', 'Maluku', 
+  'Maluku Utara', 'Papua', 'Papua Barat'
+]
+
 const loadProperties = async () => {
   loading.value = true
   error.value = ''
   try {
-    const response = await propertyService.getAll()
+    // Build query params
+    const params: any = {}
+    if (filterName.value) params.name = filterName.value
+    if (filterType.value) params.type = parseInt(filterType.value)
+    if (filterProvince.value) params.province = parseInt(filterProvince.value)
+    
+    const response = await propertyService.getAll(params)
     if (response.success) {
       properties.value = response.data
     } else {
@@ -178,6 +256,13 @@ const loadProperties = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const clearFilters = () => {
+  filterName.value = ''
+  filterType.value = ''
+  filterProvince.value = ''
+  loadProperties()
 }
 
 const goToCreateProperty = () => {
@@ -318,6 +403,83 @@ onMounted(() => {
   font-family: 'Poppins', sans-serif;
   font-size: 15px;
   font-weight: 500;
+}
+
+/* Filters Section */
+.filters-section {
+  margin-bottom: 30px;
+  padding: 25px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  border: 1px solid #F0F0F0;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  align-items: end;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter-group label {
+  color: #4A4A4A;
+  font-family: 'Poppins', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.filter-input,
+.filter-select {
+  padding: 12px 16px;
+  border: 2px solid #E0E0E0;
+  border-radius: 8px;
+  font-family: 'Poppins', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  background: white;
+  color: #1C1C1C;
+}
+
+.filter-input:focus,
+.filter-select:focus {
+  outline: none;
+  border-color: #7C6A46;
+  box-shadow: 0 0 0 3px rgba(124, 106, 70, 0.1);
+}
+
+.filter-select {
+  cursor: pointer;
+}
+
+.btn-clear-filters {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border: 2px solid #E0E0E0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: 'Poppins', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  background: white;
+  color: #666;
+}
+
+.btn-clear-filters:hover {
+  border-color: #F44336;
+  color: #F44336;
+  transform: translateY(-2px);
 }
 
 /* Actions */

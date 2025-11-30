@@ -133,7 +133,13 @@
               </svg>
               Owner Name
             </label>
-            <input type="text" v-model="formData.ownerName" required placeholder="Owner full name" />
+            <input type="text" v-model="formData.ownerName" required readonly class="input-readonly" placeholder="Owner full name" />
+            <small class="helper-text">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M6 0C2.69 0 0 2.69 0 6C0 9.31 2.69 12 6 12C9.31 12 12 9.31 12 6C12 2.69 9.31 0 6 0Z" fill="#999"/>
+              </svg>
+              Auto-filled from your account
+            </small>
           </div>
 
           <div class="form-group">
@@ -144,6 +150,12 @@
               Owner ID (UUID)
             </label>
             <input type="text" v-model="formData.ownerId" required readonly class="input-readonly" />
+            <small class="helper-text">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M6 0C2.69 0 0 2.69 0 6C0 9.31 2.69 12 6 12C9.31 12 12 9.31 12 6C12 2.69 9.31 0 6 0Z" fill="#999"/>
+              </svg>
+              Auto-filled from your account
+            </small>
           </div>
         </div>
       </div>
@@ -345,6 +357,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { propertyService } from '@/services/propertyService'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const route = useRoute()
@@ -414,6 +427,15 @@ const removeRoomType = (index: number) => {
 }
 
 onMounted(async () => {
+  // Auto-fill owner info from authenticated user for CREATE mode
+  if (!isEditMode.value) {
+    const authStore = useAuthStore()
+    if (authStore.user) {
+      formData.value.ownerName = authStore.user.name || ''
+      formData.value.ownerId = authStore.user.id || generateUUID()
+    }
+  }
+  
   if (isEditMode.value) await loadProperty()
 })
 

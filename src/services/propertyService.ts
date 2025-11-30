@@ -91,10 +91,11 @@ export interface PropertyUpdateDTO {
 }
 
 export const propertyService = {
-  // Get all properties
-  async getAll() {
+  // Get all properties with optional filters
+  async getAll(params?: { name?: string; type?: number; province?: number }) {
     const response = await api.get<{ success: boolean; message: string; data: Property[] }>(
-      '/property'
+      '/property',
+      { params }
     )
     return response.data
   },

@@ -15,14 +15,40 @@
       </div>
     </div>
 
-    <!-- Actions -->
-    <div class="actions">
-      <button @click="loadReviews" class="btn-secondary">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4C7.58 4 4.01 7.58 4.01 12C4.01 16.42 7.58 20 12 20C15.73 20 18.84 17.45 19.73 14H17.65C16.83 16.33 14.61 18 12 18C8.69 18 6 15.31 6 12C6 8.69 8.69 6 12 6C13.66 6 15.14 6.69 16.22 7.78L13 11H20V4L17.65 6.35Z" fill="currentColor"/>
-        </svg>
-        Refresh Reviews
-      </button>
+    <!-- Actions and Filters -->
+    <div class="actions-filters-container">
+      <div class="actions">
+        <button @click="loadReviews" class="btn-secondary">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4C7.58 4 4.01 7.58 4.01 12C4.01 16.42 7.58 20 12 20C15.73 20 18.84 17.45 19.73 14H17.65C16.83 16.33 14.61 18 12 18C8.69 18 6 15.31 6 12C6 8.69 8.69 6 12 6C13.66 6 15.14 6.69 16.22 7.78L13 11H20V4L17.65 6.35Z" fill="currentColor"/>
+          </svg>
+          Refresh Reviews
+        </button>
+      </div>
+      
+      <!-- Property Filter (only show for 'all' view) -->
+      <div v-if="isAllView" class="filters-section">
+        <div class="filter-group">
+          <label for="filter-property">Filter by Property</label>
+          <select 
+            id="filter-property"
+            v-model="selectedPropertyId" 
+            class="filter-select"
+            @change="loadReviews"
+          >
+            <option value="">All Properties</option>
+            <option v-for="property in availableProperties" :key="property.propertyId" :value="property.propertyId">
+              {{ property.propertyName }}
+            </option>
+          </select>
+        </div>
+        <button v-if="selectedPropertyId" @click="clearPropertyFilter" class="btn-clear-filter">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z" fill="currentColor"/>
+          </svg>
+          Clear
+        </button>
+      </div>
     </div>
 
     <!-- Loading State -->
@@ -141,6 +167,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import reviewService, { type ReviewResponse } from '@/services/reviewService'
+import { propertyService, type Property } from '@/services/propertyService'
 
 const router = useRouter()
 const route = useRoute()
@@ -172,6 +199,20 @@ const pageSubtitle = computed(() => {
 const loading = ref(false)
 const error = ref('')
 const reviews = ref<ReviewResponse[]>([])
+const selectedPropertyId = ref('')
+const availableProperties = ref<Property[]>([])
+const allReviews = ref<ReviewResponse[]>([]) // Store all reviews for filtering
+
+const loadProperties = async () => {
+  try {
+    const response = await propertyService.getAll()
+    if (response.success) {
+      availableProperties.value = response.data
+    }
+  } catch (err) {
+    console.error('Failed to load properties:', err)
+  }
+}
 
 const loadReviews = async () => {
   loading.value = true
@@ -180,9 +221,16 @@ const loadReviews = async () => {
   try {
     if (isAllView.value) {
       const response = await reviewService.getAllReviews()
-      reviews.value = response.data
+      allReviews.value = response.data
+      
+      // Filter by property if selected
+      if (selectedPropertyId.value) {
+        reviews.value = allReviews.value.filter(r => r.propertyId === selectedPropertyId.value)
+      } else {
+        reviews.value = allReviews.value
+      }
     } else if (isCustomerView.value) {
-      const response = await reviewService.getReviewsByCustomer(customerId.value)
+      const response = await reviewService.getMyReviews()
       reviews.value = response.data
     } else {
       const response = await reviewService.getReviewsByProperty(propertyId.value)
@@ -194,6 +242,11 @@ const loadReviews = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const clearPropertyFilter = () => {
+  selectedPropertyId.value = ''
+  loadReviews()
 }
 
 const formatDate = (dateStr: string) => {
@@ -226,6 +279,9 @@ const deleteReview = async (reviewId: string) => {
 }
 
 onMounted(() => {
+  if (isAllView.value) {
+    loadProperties() // Load properties for filter dropdown
+  }
   loadReviews()
 })
 </script>
@@ -283,10 +339,14 @@ onMounted(() => {
 }
 
 /* Actions */
+.actions-filters-container {
+  margin-bottom: 35px;
+}
+
 .actions {
   display: flex;
   gap: 15px;
-  margin-bottom: 35px;
+  margin-bottom: 20px;
 }
 
 .btn-secondary {
@@ -308,6 +368,73 @@ onMounted(() => {
 
 .btn-secondary:hover {
   background: #FAFAFA;
+  transform: translateY(-2px);
+}
+
+/* Filters Section */
+.filters-section {
+  display: flex;
+  gap: 15px;
+  align-items: flex-end;
+  padding: 20px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid #F0F0F0;
+}
+
+.filter-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter-group label {
+  color: #4A4A4A;
+  font-family: 'Poppins', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.filter-select {
+  padding: 12px 16px;
+  border: 2px solid #E0E0E0;
+  border-radius: 8px;
+  font-family: 'Poppins', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  background: white;
+  color: #1C1C1C;
+  cursor: pointer;
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: #7C6A46;
+  box-shadow: 0 0 0 3px rgba(124, 106, 70, 0.1);
+}
+
+.btn-clear-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 20px;
+  border: 2px solid #E0E0E0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: 'Poppins', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  background: white;
+  color: #666;
+}
+
+.btn-clear-filter:hover {
+  border-color: #F44336;
+  color: #F44336;
   transform: translateY(-2px);
 }
 
