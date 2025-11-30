@@ -7,9 +7,9 @@ spring:
     name: accommodation-2306212083-be
   
   datasource:
-    # Production PostgreSQL (from GitLab CI/CD -> K8s ConfigMap/Secret)
+    # Production PostgreSQL (from GitLab CI/CD -> K8s ConfigMap/Secret).
     # CI/CD Variables: DATABASE_URL_PROD, DATABASE_USERNAME, DATABASE_PASSWORD
-    url: ${DATABASE_URL_PROD:jdbc:postgresql://18.211.76.190:35002/accommodation_dev}
+    url: ${DATABASE_URL_PROD:jdbc:jdbc:postgresql://52.54.198.196:35002/accommodation_dev}
     username: ${DATABASE_USERNAME:accommodation_user}
     password: ${DATABASE_PASSWORD}
     driver-class-name: org.postgresql.Driver
