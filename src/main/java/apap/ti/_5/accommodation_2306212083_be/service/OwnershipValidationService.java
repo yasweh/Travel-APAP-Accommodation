@@ -15,7 +15,7 @@ import org.springframework.stereotype.Service;
 import java.util.UUID;
 
 /**
- * Service untuk validasi ownership dan akses berbasis role
+ * Service untuk validasi ownership dan akses berbasis roles
  * Memastikan Accommodation Owner hanya bisa akses data milik mereka sendiri
  */
 @Service
