@@ -44,19 +44,19 @@ const handleLogout = async () => {
       
       <!-- Auth Container -->
       <div class="auth-section">
-        <div v-if="isAuthenticated" class="user-info">
+        <div v-if="isAuthenticated" class="user-info" @click="navigateTo('/profile')">
           <div class="user-avatar">{{ currentUser?.name?.charAt(0).toUpperCase() }}</div>
           <div class="user-details">
             <div class="user-name">{{ currentUser?.name }}</div>
             <div class="user-role">{{ currentUser?.role }}</div>
           </div>
-          <button class="logout-btn" @click="handleLogout">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M17 7L15.59 8.41L18.17 11H8V13H18.17L15.59 15.58L17 17L22 12L17 7ZM4 5H12V3H4C2.9 3 2 3.9 2 5V19C2 20.1 2.9 21 4 21H12V19H4V5Z" fill="currentColor"/>
-            </svg>
-          </button>
         </div>
-        <div v-else class="guest-actions">
+        <button v-if="isAuthenticated" class="logout-btn" @click="handleLogout">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M17 7L15.59 8.41L18.17 11H8V13H18.17L15.59 15.58L17 17L22 12L17 7ZM4 5H12V3H4C2.9 3 2 3.9 2 5V19C2 20.1 2.9 21 4 21H12V19H4V5Z" fill="currentColor"/>
+          </svg>
+        </button>
+        <div v-if="!isAuthenticated" class="guest-actions">
           <button class="login-btn" @click="navigateTo('/login')">Login</button>
         </div>
         <div class="book-btn" @click="navigateTo('/booking/create')">
@@ -161,6 +161,13 @@ const handleLogout = async () => {
   background: rgba(255, 255, 255, 0.95);
   border-radius: 30px;
   border: 2px solid #F0F0F0;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.user-info:hover {
+  border-color: #7C6A46;
+  box-shadow: 0 4px 12px rgba(124, 106, 70, 0.15);
 }
 
 .user-avatar {

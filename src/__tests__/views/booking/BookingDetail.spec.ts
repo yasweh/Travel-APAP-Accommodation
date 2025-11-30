@@ -8,7 +8,6 @@ import { bookingService } from '@/services/bookingService'
 vi.mock('@/services/bookingService', () => ({
   bookingService: {
     getById: vi.fn(),
-    pay: vi.fn(),
     cancel: vi.fn()
   }
 }))
@@ -237,7 +236,7 @@ describe('BookingDetail.vue', () => {
   })
 
   describe('Action Buttons', () => {
-    it('should show Pay button when canPay is true', async () => {
+    it('should show Pay via Bill Service button when canPay is true', async () => {
       vi.mocked(bookingService.getById).mockResolvedValue({
         success: true,
         data: mockBooking,
@@ -247,7 +246,7 @@ describe('BookingDetail.vue', () => {
       const wrapper = await mountComponent()
       
       expect(wrapper.find('.btn-pay').exists()).toBe(true)
-      expect(wrapper.text()).toContain('Confirm Payment')
+      expect(wrapper.text()).toContain('Pay via Bill Service')
     })
 
     it('should show Cancel button when canCancel is true', async () => {
@@ -304,62 +303,28 @@ describe('BookingDetail.vue', () => {
     })
   })
 
-  describe('Payment Action', () => {
+  describe('Bill Service Payment Redirect', () => {
     beforeEach(() => {
       vi.mocked(bookingService.getById).mockResolvedValue({
         success: true,
         data: mockBooking,
         availableActions: { canPay: true, canCancel: true, canUpdate: true }
       })
-    })
-
-    it('should confirm before processing payment', async () => {
-      vi.mocked(window.confirm).mockReturnValue(false)
-      
-      const wrapper = await mountComponent()
-      await wrapper.find('.btn-pay').trigger('click')
-      
-      expect(window.confirm).toHaveBeenCalledWith('Confirm payment for this booking?')
-      expect(bookingService.pay).not.toHaveBeenCalled()
-    })
-
-    it('should process payment when confirmed', async () => {
-      vi.mocked(window.confirm).mockReturnValue(true)
-      vi.mocked(bookingService.pay).mockResolvedValue({ success: true })
-      
-      const wrapper = await mountComponent()
-      await wrapper.find('.btn-pay').trigger('click')
-      await flushPromises()
-      
-      expect(bookingService.pay).toHaveBeenCalledWith('BOOK-12345')
-      expect(window.alert).toHaveBeenCalledWith('Payment confirmed successfully!')
-    })
-
-    it('should show error message when payment fails', async () => {
-      vi.mocked(window.confirm).mockReturnValue(true)
-      vi.mocked(bookingService.pay).mockResolvedValue({ 
-        success: false, 
-        message: 'Payment failed' 
+      // Mock window.open
+      vi.spyOn(window, 'open').mockImplementation(() => null)
+      // Mock fetch for Bill Service API call
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ success: true })
       })
-      
-      const wrapper = await mountComponent()
-      await wrapper.find('.btn-pay').trigger('click')
-      await flushPromises()
-      
-      expect(window.alert).toHaveBeenCalledWith('Payment failed')
     })
 
-    it('should handle payment API error', async () => {
-      vi.mocked(window.confirm).mockReturnValue(true)
-      vi.mocked(bookingService.pay).mockRejectedValue({
-        response: { data: { message: 'Server error' } }
-      })
-      
+    it('should open Bill Service when Pay button is clicked', async () => {
       const wrapper = await mountComponent()
       await wrapper.find('.btn-pay').trigger('click')
       await flushPromises()
       
-      expect(window.alert).toHaveBeenCalledWith('Server error')
+      expect(window.open).toHaveBeenCalledWith('http://2306211660-fe.hafizmuh.site', '_blank')
     })
   })
 

@@ -93,11 +93,15 @@ export interface DashboardResponse {
 export const supportTicketService = {
   /**
    * Get all tickets with optional filters
+   * If userId is undefined, backend returns all tickets (for Superadmin)
    */
-  getAllTickets(userId: string, status?: string, serviceSource?: string) {
-    return api.get<TicketResponse[]>('/support-tickets', {
-      params: { userId, status, serviceSource },
-    })
+  getAllTickets(userId?: string, status?: string, serviceSource?: string) {
+    const params: { userId?: string; status?: string; serviceSource?: string } = {}
+    if (userId) params.userId = userId
+    if (status) params.status = status
+    if (serviceSource) params.serviceSource = serviceSource
+    
+    return api.get<TicketResponse[]>('/support-tickets', { params })
   },
 
   /**
@@ -171,20 +175,26 @@ export const supportTicketService = {
 
   /**
    * Get available bookings from external services
+   * If userId is empty/null, backend will return all bookings (for Superadmin)
    */
-  getAvailableBookings(serviceSource: string, userId: string) {
-    return api.get<any[]>('/support-tickets/bookings', {
-      params: { serviceSource, userId },
-    })
+  getAvailableBookings(serviceSource: string, userId?: string) {
+    const params: { serviceSource: string; userId?: string } = { serviceSource }
+    if (userId) {
+      params.userId = userId
+    }
+    return api.get<any[]>('/support-tickets/bookings', { params })
   },
 
   /**
    * Get dashboard data: all bookings from 5 services + user's tickets
+   * If userId is empty/null, backend will return all data (for Superadmin)
    */
-  getDashboard(userId: string) {
-    return api.get<DashboardResponse>('/support-tickets/dashboard', {
-      params: { userId },
-    })
+  getDashboard(userId?: string) {
+    const params: { userId?: string } = {}
+    if (userId) {
+      params.userId = userId
+    }
+    return api.get<DashboardResponse>('/support-tickets/dashboard', { params })
   },
 }
 

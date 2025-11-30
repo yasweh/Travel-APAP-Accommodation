@@ -55,13 +55,13 @@
         </button>
         <button 
           v-if="availableActions.canPay" 
-          @click="confirmPayment" 
+          @click="goToBillService" 
           class="btn-action btn-pay"
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M13.3333 2H2.66667C1.93333 2 1.33333 2.6 1.33333 3.33333V12.6667C1.33333 13.4 1.93333 14 2.66667 14H13.3333C14.0667 14 14.6667 13.4 14.6667 12.6667V3.33333C14.6667 2.6 14.0667 2 13.3333 2ZM13.3333 12.6667H2.66667V8H13.3333V12.6667ZM13.3333 5.33333H2.66667V3.33333H13.3333V5.33333Z" fill="white"/>
           </svg>
-          Confirm Payment
+          Pay via Bill Service
         </button>
         <button 
           v-if="availableActions.canUpdate" 
@@ -303,20 +303,47 @@ const calculateRoomRate = () => {
   return baseRate
 }
 
-const confirmPayment = async () => {
-  if (!confirm('Confirm payment for this booking?')) return
-
-  try {
-    const response = await bookingService.pay(booking.value.bookingId)
-    if (response.success) {
-      alert('Payment confirmed successfully!')
-      loadBookingDetail()
-    } else {
-      alert(response.message)
-    }
-  } catch (err: any) {
-    alert(err.response?.data?.message || 'Failed to confirm payment')
+// Navigate to Bill Service for payment
+const goToBillService = async () => {
+  if (!booking.value) return
+  
+  // Bill Service Frontend URL
+  const billServiceFrontendUrl = 'http://2306211660-fe.hafizmuh.site'
+  // Bill Service Backend API URL
+  const billServiceApiUrl = 'http://2306211660-be.hafizmuh.site/api/bill'
+  
+  // Create bill payload matching Bill Service's expected format
+  const billPayload = {
+    customerId: booking.value.customerId,
+    serviceName: 'ACCOMMODATION',
+    serviceReferenceId: booking.value.bookingId,
+    description: `Booking ${booking.value.roomName} at ${booking.value.propertyName} (${booking.value.totalDays} night(s))`,
+    amount: booking.value.totalPrice
   }
+  
+  try {
+    // Try to create bill via API first
+    const response = await fetch(billServiceApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(billPayload)
+    })
+    
+    if (response.ok) {
+      const result = await response.json()
+      console.log('Bill created:', result)
+      alert('Bill created successfully! Redirecting to Bill Service to complete payment...')
+    } else {
+      console.warn('Bill API returned non-ok status, redirecting to frontend anyway')
+    }
+  } catch (error) {
+    console.warn('Could not create bill via API, redirecting to Bill Service frontend:', error)
+  }
+  
+  // Open Bill Service frontend for user to complete payment
+  window.open(billServiceFrontendUrl, '_blank')
 }
 
 const confirmCancel = async () => {

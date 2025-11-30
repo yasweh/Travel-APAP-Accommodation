@@ -161,14 +161,13 @@ export const bookingService = {
     return response.data
   },
 
-  // Confirm payment
-  async pay(bookingId: string) {
-    const response = await api.post<{ success: boolean; message: string }>(
-      '/bookings/status/pay',
-      { bookingId }
-    )
-    return response.data
-  },
+  // Payment is now handled via Bill Service
+  // When user clicks "Pay via Bill Service", they are redirected to:
+  // http://2306211660-fe.hafizmuh.site/
+  // 
+  // Bill Service will then call back to our endpoint:
+  // POST /api/policy/payment/confirm
+  // with payload: { serviceReferenceId: bookingId, customerId: customerId }
 
   // Cancel booking
   async cancel(bookingId: string) {

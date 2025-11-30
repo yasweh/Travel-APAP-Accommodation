@@ -251,18 +251,40 @@ const fetchBookings = async () => {
   loading.value = true
   error.value = ''
   
+  console.log('========== FETCHING BOOKINGS FOR SUPPORT ==========')
+  console.log('Auth token:', localStorage.getItem('auth_token') ? 'EXISTS' : 'NULL')
+  console.log('Auth user:', localStorage.getItem('auth_user'))
+  
   try {
+    console.log('Making request to /support/bookings...')
     const response = await api.get('/support/bookings')
+    
+    console.log('========== RESPONSE RECEIVED ==========')
+    console.log('Full response:', response)
+    console.log('Response status:', response.status)
+    console.log('Response data:', response.data)
+    console.log('Success:', response.data.success)
+    console.log('Total bookings:', response.data.total)
+    console.log('Summary by source:', response.data.summaryBySource)
+    console.log('Current role:', response.data.currentRole)
+    console.log('Current userId:', response.data.currentUserId)
+    console.log('Bookings data:', response.data.data)
     
     if (response.data.success) {
       bookings.value = response.data.data
       bookingsSummary.value = response.data.summaryBySource
+      console.log('Bookings set to state:', bookings.value.length, 'items')
     } else {
       error.value = response.data.message || 'Failed to fetch bookings'
+      console.error('API returned success=false:', response.data.message)
     }
   } catch (err: any) {
+    console.error('========== ERROR FETCHING BOOKINGS ==========')
+    console.error('Error object:', err)
+    console.error('Error response:', err.response)
+    console.error('Error response data:', err.response?.data)
+    console.error('Error message:', err.message)
     error.value = err.response?.data?.message || 'Failed to fetch bookings from services'
-    console.error('Error fetching bookings:', err)
   } finally {
     loading.value = false
   }

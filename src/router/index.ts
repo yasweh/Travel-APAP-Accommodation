@@ -137,6 +137,14 @@ const router = createRouter({
       component: () => import('../views/review/ReviewListView.vue'),
       meta: { requiresAuth: true }
     },
+
+    // User Profile
+    {
+      path: '/profile',
+      name: 'user-profile',
+      component: () => import('../views/user/ProfileView.vue'),
+      meta: { requiresAuth: true }
+    },
   ],
 })
 

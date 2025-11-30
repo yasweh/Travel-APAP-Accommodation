@@ -112,8 +112,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
 import supportTicketService, { type CreateTicketRequest } from '@/services/supportTicketService'
+import { useAuthStore } from '@/stores/auth'
 
 interface Props {
   initialServiceSource?: string
@@ -122,11 +123,15 @@ interface Props {
 
 const props = defineProps<Props>()
 const emit = defineEmits(['close', 'ticket-created'])
+const authStore = useAuthStore()
+
+// Get userId from auth store
+const currentUserId = computed(() => authStore.user?.id || '')
 
 // State
 const step = ref(1)
 const formData = ref<CreateTicketRequest>({
-  userId: '263d012e-b86a-4813-be96-41e6da78e00d', // John Doe from seeder
+  userId: '', // Will be set from auth store
   subject: '',
   serviceSource: '',
   externalBookingId: '',
@@ -139,8 +144,11 @@ const bookingsError = ref('')
 const submitError = ref('')
 const submitting = ref(false)
 
-// Initialize with props if provided
+// Initialize with props if provided and set userId from auth
 onMounted(() => {
+  // Set userId from auth store
+  formData.value.userId = currentUserId.value
+  
   if (props.initialServiceSource) {
     formData.value.serviceSource = props.initialServiceSource
     step.value = 2 // Skip to booking selection

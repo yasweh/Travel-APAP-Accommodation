@@ -191,7 +191,7 @@
       </svg>
       <h3>No Statistics Data</h3>
       <p>No statistics available for {{ getMonthName(selectedMonth) }} {{ selectedYear }}</p>
-      <p class="hint">Make sure there are completed bookings (status = DONE) with check-in dates in this period</p>
+      <p class="hint">Make sure there are confirmed bookings (Payment Confirmed) with check-in dates in this period</p>
     </div>
   </div>
 </template>

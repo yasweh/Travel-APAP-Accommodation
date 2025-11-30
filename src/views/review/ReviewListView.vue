@@ -168,9 +168,11 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import reviewService, { type ReviewResponse } from '@/services/reviewService'
 import { propertyService, type Property } from '@/services/propertyService'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const route = useRoute()
+const authStore = useAuthStore()
 
 // Props: view mode ('all', 'property', or 'customer')
 const viewMode = computed(() => {
@@ -179,7 +181,7 @@ const viewMode = computed(() => {
   return 'property'
 })
 const propertyId = computed(() => route.params.propertyId as string)
-const customerId = ref('263d012e-b86a-4813-be96-41e6da78e00d') // John Doe from seeder
+const customerId = computed(() => authStore.user?.id || '')
 
 const isCustomerView = computed(() => viewMode.value === 'customer')
 const isAllView = computed(() => viewMode.value === 'all')

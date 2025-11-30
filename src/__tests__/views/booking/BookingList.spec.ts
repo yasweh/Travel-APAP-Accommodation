@@ -13,13 +13,11 @@ vi.mock('vue-router', () => ({
 
 // Mock bookingService
 const mockGetAll = vi.fn()
-const mockPay = vi.fn()
 const mockCancel = vi.fn()
 
 vi.mock('@/services/bookingService', () => ({
   bookingService: {
     getAll: () => mockGetAll(),
-    pay: (id: string) => mockPay(id),
     cancel: (id: string) => mockCancel(id)
   }
 }))

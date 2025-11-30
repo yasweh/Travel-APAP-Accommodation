@@ -165,12 +165,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { bookingService, type BookingResponseDTO } from '@/services/bookingService'
 import CreateReviewModal from '@/components/review/CreateReviewModal.vue'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
 const bookings = ref<BookingResponseDTO[]>([])
 const loading = ref(false)
@@ -179,7 +181,7 @@ const error = ref('')
 // Review modal state
 const showReviewModal = ref(false)
 const selectedBookingId = ref('')
-const customerId = ref('550e8400-e29b-41d4-a716-446655440000') // Hardcoded for now
+const customerId = computed(() => authStore.user?.id || '')
 
 const loadBookings = async () => {
   loading.value = true
@@ -240,22 +242,7 @@ const handleReviewSuccess = () => {
   closeReviewModal()
 }
 
-const confirmPayment = async (bookingId: string) => {
-  if (!confirm('Confirm payment for this booking?')) return
-
-  try {
-    const response = await bookingService.pay(bookingId)
-    if (response.success) {
-      alert('Payment confirmed successfully!')
-      loadBookings()
-    } else {
-      alert(response.message)
-    }
-  } catch (err: any) {
-    alert(err.response?.data?.message || 'Failed to confirm payment')
-    console.error('Payment error:', err)
-  }
-}
+// Payment is now handled via Bill Service - see BookingDetail.vue for redirect logic
 
 const cancelBooking = async (bookingId: string) => {
   if (!confirm('Are you sure you want to cancel this booking?')) return

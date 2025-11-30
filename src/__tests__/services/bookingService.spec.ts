@@ -200,18 +200,8 @@ describe('Booking Service', () => {
     })
   })
 
-  describe('pay', () => {
-    it('should confirm payment', async () => {
-      vi.mocked(api.post).mockResolvedValue({
-        data: { success: true, message: 'Payment confirmed' }
-      })
-
-      const result = await bookingService.pay('b1')
-
-      expect(api.post).toHaveBeenCalledWith('/bookings/status/pay', { bookingId: 'b1' })
-      expect(result.success).toBe(true)
-    })
-  })
+  // Payment is now handled via Bill Service, so pay() method was removed
+  // See BookingDetail.vue goToBillService() for the new payment flow
 
   describe('cancel', () => {
     it('should cancel booking', async () => {

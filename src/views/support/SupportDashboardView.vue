@@ -315,16 +315,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import BookingCard from '@/components/BookingCard.vue'
 import CreateTicketModal from '@/components/support/CreateTicketModal.vue'
 import supportTicketService, { type DashboardResponse } from '@/services/supportTicketService'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
-// Hardcoded userId for testing (replace with actual auth later)
-const userId = ref('263d012e-b86a-4813-be96-41e6da78e00d') // John Doe from seeder
+// Get userId from auth store - empty string for Superadmin means "all users"
+const userId = computed(() => authStore.user?.id || '')
+const isSuperadmin = computed(() => authStore.isSuperadmin)
 
 // State
 const loading = ref(false)
@@ -367,6 +370,15 @@ const selectedBookingId = ref('')
 const loadDashboard = async () => {
   loading.value = true
   error.value = ''
+  
+  // For Superadmin, don't send userId to get all bookings
+  // For other users, use their own userId
+  const effectiveUserId = isSuperadmin.value ? undefined : userId.value
+  
+  console.log('=== Load Dashboard ===')
+  console.log('User ID:', userId.value)
+  console.log('Is Superadmin:', isSuperadmin.value)
+  console.log('Effective userId (sent to API):', effectiveUserId)
 
   // Reset error states
   Object.keys(errorStates.value).forEach(key => {
@@ -380,7 +392,7 @@ const loadDashboard = async () => {
       (async () => {
         loadingStates.value.accommodation = true
         try {
-          const response = await supportTicketService.getAvailableBookings('ACCOMMODATION', userId.value)
+          const response = await supportTicketService.getAvailableBookings('ACCOMMODATION', effectiveUserId)
           dashboard.value.accommodationBookings = response.data
         } catch (err: any) {
           console.error('Failed to load accommodation bookings:', err)
@@ -395,7 +407,7 @@ const loadDashboard = async () => {
       (async () => {
         loadingStates.value.flight = true
         try {
-          const response = await supportTicketService.getAvailableBookings('FLIGHT', userId.value)
+          const response = await supportTicketService.getAvailableBookings('FLIGHT', effectiveUserId)
           dashboard.value.flightBookings = response.data
         } catch (err: any) {
           console.error('Failed to load flight bookings:', err)
@@ -410,7 +422,7 @@ const loadDashboard = async () => {
       (async () => {
         loadingStates.value.rental = true
         try {
-          const response = await supportTicketService.getAvailableBookings('RENTAL', userId.value)
+          const response = await supportTicketService.getAvailableBookings('RENTAL', effectiveUserId)
           dashboard.value.rentalBookings = response.data
         } catch (err: any) {
           console.error('Failed to load rental bookings:', err)
@@ -425,7 +437,7 @@ const loadDashboard = async () => {
       (async () => {
         loadingStates.value.tour = true
         try {
-          const response = await supportTicketService.getAvailableBookings('TOUR', userId.value)
+          const response = await supportTicketService.getAvailableBookings('TOUR', effectiveUserId)
           dashboard.value.tourBookings = response.data
         } catch (err: any) {
           console.error('Failed to load tour bookings:', err)
@@ -440,7 +452,7 @@ const loadDashboard = async () => {
       (async () => {
         loadingStates.value.insurance = true
         try {
-          const response = await supportTicketService.getAvailableBookings('INSURANCE', userId.value)
+          const response = await supportTicketService.getAvailableBookings('INSURANCE', effectiveUserId)
           dashboard.value.insuranceBookings = response.data
         } catch (err: any) {
           console.error('Failed to load insurance bookings:', err)
@@ -451,11 +463,12 @@ const loadDashboard = async () => {
         }
       })(),
       
-      // Support Tickets
+      // Support Tickets - for tickets, always use userId to show user's own tickets
+      // Superadmin can still see all tickets through getAllTickets(undefined)
       (async () => {
         loadingStates.value.tickets = true
         try {
-          const response = await supportTicketService.getAllTickets(userId.value)
+          const response = await supportTicketService.getAllTickets(effectiveUserId)
           dashboard.value.supportTickets = response.data
         } catch (err: any) {
           console.error('Failed to load support tickets:', err)
