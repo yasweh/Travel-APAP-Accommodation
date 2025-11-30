@@ -124,6 +124,16 @@
             </svg>
             View Details
           </button>
+          <button 
+            v-if="canReview(booking)" 
+            @click="openReviewModal(booking.bookingId)" 
+            class="btn-action btn-review"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M14 0H2C0.9 0 0 0.9 0 2V16L4 12H14C15.1 12 16 11.1 16 10V2C16 0.9 15.1 0 14 0ZM13 9H3V7H13V9ZM13 6H3V4H13V6Z" fill="white"/>
+            </svg>
+            Write Review
+          </button>
         </div>
       </div>
     </div>
@@ -142,6 +152,15 @@
         Create First Booking
       </button>
     </div>
+
+    <!-- Review Modal -->
+    <CreateReviewModal
+      v-if="showReviewModal"
+      :booking-id="selectedBookingId"
+      :customer-id="customerId"
+      @close="closeReviewModal"
+      @success="handleReviewSuccess"
+    />
   </div>
 </template>
 
@@ -149,12 +168,18 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { bookingService, type BookingResponseDTO } from '@/services/bookingService'
+import CreateReviewModal from '@/components/review/CreateReviewModal.vue'
 
 const router = useRouter()
 
 const bookings = ref<BookingResponseDTO[]>([])
 const loading = ref(false)
 const error = ref('')
+
+// Review modal state
+const showReviewModal = ref(false)
+const selectedBookingId = ref('')
+const customerId = ref('550e8400-e29b-41d4-a716-446655440000') // Hardcoded for now
 
 const loadBookings = async () => {
   loading.value = true
@@ -188,6 +213,31 @@ const goToDetail = (bookingId: string) => {
 
 const goToUpdate = (bookingId: string) => {
   router.push(`/booking/update/${bookingId}`)
+}
+
+// Check if booking can be reviewed
+const canReview = (booking: BookingResponseDTO) => {
+  // Can review if: status is Payment Confirmed (1) AND checkout date has passed
+  if (booking.status !== 1) return false
+  
+  const checkoutDate = new Date(booking.checkOutDate)
+  const now = new Date()
+  return now >= checkoutDate
+}
+
+const openReviewModal = (bookingId: string) => {
+  selectedBookingId.value = bookingId
+  showReviewModal.value = true
+}
+
+const closeReviewModal = () => {
+  showReviewModal.value = false
+  selectedBookingId.value = ''
+}
+
+const handleReviewSuccess = () => {
+  alert('Review submitted successfully!')
+  closeReviewModal()
 }
 
 const confirmPayment = async (bookingId: string) => {
@@ -642,10 +692,12 @@ onMounted(() => {
   padding: 20px 25px;
   background: #FAFAFA;
   border-top: 1px solid #F0F0F0;
+  display: flex;
+  gap: 12px;
 }
 
 .btn-action {
-  width: 100%;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -668,6 +720,15 @@ onMounted(() => {
 .btn-detail:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(33, 150, 243, 0.4);
+}
+
+.btn-review {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+}
+
+.btn-review:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.4);
 }
 
 /* Empty State */

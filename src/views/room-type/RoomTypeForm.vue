@@ -64,15 +64,13 @@
               <optgroup v-if="propertyType === 1" label="Villa Room Types">
                 <option value="Luxury">Luxury</option>
                 <option value="Beachfront">Beachfront</option>
-                <option value="Mountside">Mountside</option>
-                <option value="Eco-friendly">Eco-friendly</option>
-                <option value="Romantic">Romantic</option>
+                <option value="Pool Villa">Pool Villa</option>
+                <option value="Mountain View">Mountain View</option>
               </optgroup>
               <optgroup v-if="propertyType === 2" label="Apartment Room Types">
                 <option value="Studio">Studio</option>
-                <option value="1BR">1BR</option>
-                <option value="2BR">2BR</option>
-                <option value="3BR">3BR</option>
+                <option value="One Bedroom">One Bedroom</option>
+                <option value="Two Bedroom">Two Bedroom</option>
                 <option value="Penthouse">Penthouse</option>
               </optgroup>
             </select>
@@ -297,7 +295,22 @@ const submitForm = async () => {
       error.value = response.data.message
     }
   } catch (err: any) {
-    error.value = err.response?.data?.message || 'Failed to add room types'
+    console.error('Error adding room types:', err)
+    
+    // Handle detailed validation error from backend
+    if (err.response?.data) {
+      const errorData = err.response.data
+      
+      if (errorData.invalidRoomTypes && errorData.invalidRoomTypes.length > 0) {
+        error.value = `${errorData.message || 'Validation failed'}\n\n` +
+          `Invalid room types: ${errorData.invalidRoomTypes.join(', ')}\n\n` +
+          `Valid room types for ${errorData.propertyTypeString}: ${errorData.validRoomTypes?.join(', ') || 'N/A'}`
+      } else {
+        error.value = errorData.message || 'Failed to add room types'
+      }
+    } else {
+      error.value = 'Failed to add room types. Please try again.'
+    }
   } finally {
     submitting.value = false
   }
@@ -331,6 +344,7 @@ h1 {
   padding: 12px;
   border-radius: 4px;
   margin-bottom: 20px;
+  white-space: pre-line;
 }
 
 .success-message {

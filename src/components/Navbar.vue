@@ -1,10 +1,27 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import { computed } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+import { authService } from '@/services/authService'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
 const navigateTo = (path: string) => {
   router.push(path)
+}
+
+const currentUser = computed(() => authStore.user)
+const isAuthenticated = computed(() => authStore.isAuthenticated)
+const isCustomer = computed(() => authStore.user?.role === 'Customer')
+
+const handleLogout = async () => {
+  try {
+    await authService.logout()
+    router.push('/login')
+  } catch (error) {
+    console.error('Logout failed:', error)
+  }
 }
 </script>
 
@@ -19,15 +36,33 @@ const navigateTo = (path: string) => {
       </svg>
       <div class="links">
         <div class="link" :class="{ active: $route.path === '/' }" @click="navigateTo('/')">Home</div>
-        <div class="link" :class="{ active: $route.path.startsWith('/property') }" @click="navigateTo('/property')">Properties</div>
-        <div class="link" :class="{ active: $route.path.startsWith('/room-type') }" @click="navigateTo('/room-type')">Rooms</div>
-        <div class="link" :class="{ active: $route.path.startsWith('/booking') }" @click="navigateTo('/booking')">Booking</div>
-        <div class="link" :class="{ active: $route.path.startsWith('/maintenance') }" @click="navigateTo('/maintenance')">Maintenance</div>
-        <div class="link" :class="{ active: $route.path.startsWith('/booking/chart') }" @click="navigateTo('/booking/chart')">Statistics</div>
+        <div v-if="!isCustomer" class="link" :class="{ active: $route.path.startsWith('/property') }" @click="navigateTo('/property')">Properties</div>
+        <div class="link" :class="{ active: $route.path.startsWith('/booking') }" @click="navigateTo('/booking')">Bookings</div>
+        <div class="link" :class="{ active: $route.path.startsWith('/support') }" @click="navigateTo('/support')">Support</div>
+        <div class="link" :class="{ active: $route.path.startsWith('/reviews') }" @click="navigateTo('/reviews/my-reviews')">Reviews</div>
       </div>
-      <div class="book-btn" @click="navigateTo('/booking/create')">
-        <div class="btn-bg"></div>
-        <div class="btn-text">Book now</div>
+      
+      <!-- Auth Container -->
+      <div class="auth-section">
+        <div v-if="isAuthenticated" class="user-info">
+          <div class="user-avatar">{{ currentUser?.name?.charAt(0).toUpperCase() }}</div>
+          <div class="user-details">
+            <div class="user-name">{{ currentUser?.name }}</div>
+            <div class="user-role">{{ currentUser?.role }}</div>
+          </div>
+          <button class="logout-btn" @click="handleLogout">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M17 7L15.59 8.41L18.17 11H8V13H18.17L15.59 15.58L17 17L22 12L17 7ZM4 5H12V3H4C2.9 3 2 3.9 2 5V19C2 20.1 2.9 21 4 21H12V19H4V5Z" fill="currentColor"/>
+            </svg>
+          </button>
+        </div>
+        <div v-else class="guest-actions">
+          <button class="login-btn" @click="navigateTo('/login')">Login</button>
+        </div>
+        <div class="book-btn" @click="navigateTo('/booking/create')">
+          <div class="btn-bg"></div>
+          <div class="btn-text">Book now</div>
+        </div>
       </div>
     </div>
   </div>
@@ -57,7 +92,7 @@ const navigateTo = (path: string) => {
 
 .nav-links {
   width: calc(100% - 240px);
-  max-width: 1271px;
+  max-width: 1400px;
   height: 55px;
   position: absolute;
   left: 50%;
@@ -66,6 +101,7 @@ const navigateTo = (path: string) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 30px;
 }
 
 .logo {
@@ -73,6 +109,7 @@ const navigateTo = (path: string) => {
   height: 32px;
   cursor: pointer;
   transition: transform 0.3s ease;
+  flex-shrink: 0;
 }
 
 .logo:hover {
@@ -81,8 +118,10 @@ const navigateTo = (path: string) => {
 
 .links {
   display: flex;
-  gap: 60px;
+  gap: 40px;
   align-items: center;
+  flex: 1;
+  justify-content: center;
 }
 
 .link {
@@ -93,6 +132,7 @@ const navigateTo = (path: string) => {
   cursor: pointer;
   transition: all 0.3s ease;
   padding: 8px 0;
+  white-space: nowrap;
 }
 
 .link.active {
@@ -105,12 +145,116 @@ const navigateTo = (path: string) => {
   color: #7C6A46;
 }
 
+/* Auth Section */
+.auth-section {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex-shrink: 0;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 30px;
+  border: 2px solid #F0F0F0;
+}
+
+.user-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7C6A46 0%, #9B8A68 100%);
+  color: #FFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Poppins', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.user-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.user-name {
+  color: #1C1C1C;
+  font-family: 'Poppins', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.user-role {
+  color: #7C6A46;
+  font-family: 'Poppins', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.logout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  background: #F44336;
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+.logout-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
+}
+
+.guest-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.login-btn {
+  padding: 10px 24px;
+  border: 2px solid #7C6A46;
+  border-radius: 25px;
+  background: white;
+  color: #7C6A46;
+  font-family: 'Poppins', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.login-btn:hover {
+  background: #7C6A46;
+  color: white;
+  transform: translateY(-2px);
+}
+
 .book-btn {
-  width: 165px;
-  height: 55px;
+  width: 145px;
+  height: 50px;
   position: relative;
   cursor: pointer;
   transition: transform 0.3s ease;
+  flex-shrink: 0;
 }
 
 .book-btn:hover {
@@ -118,8 +262,8 @@ const navigateTo = (path: string) => {
 }
 
 .btn-bg {
-  width: 165px;
-  height: 55px;
+  width: 145px;
+  height: 50px;
   border-radius: 5px;
   background: #7C6A46;
   position: absolute;
@@ -131,8 +275,10 @@ const navigateTo = (path: string) => {
   font-size: 15px;
   font-weight: 500;
   position: absolute;
-  left: 46px;
-  top: 16px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
 }
 
 @media (max-width: 1400px) {

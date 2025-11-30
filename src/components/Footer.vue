@@ -13,7 +13,7 @@ const navigateTo = (path: string) => {
     <div class="footer-bg"></div>
     <div class="footer-content">
       <div class="footer-column">
-        <div class="footer-brand">Paradise view</div>
+        <div class="footer-brand">Travel Apap Accommodation</div>
         <div class="footer-description">The service at the Hotel Monteleone was exceptional. There was absolutely no issue that was not addressed timely and with satisfactory results.</div>
       </div>
       
@@ -54,7 +54,6 @@ const navigateTo = (path: string) => {
         </div>
       </div>
     </div>
-    <div class="footer-copyright">Paradise view 2023</div>
   </div>
 </template>
 

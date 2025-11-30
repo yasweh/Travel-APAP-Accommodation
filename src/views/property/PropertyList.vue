@@ -37,6 +37,28 @@
         </svg>
         Refresh
       </button>
+      
+      <!-- Quick Access Buttons -->
+      <div class="quick-actions">
+        <button @click="goToRoomTypes" class="btn-quick">
+          <svg width="20" height="20" viewBox="0 0 23 20" fill="none">
+            <path d="M16.6667 17.7778H18.8889V8.88889H12.2222V17.7778H14.4444V11.1111H16.6667V17.7778ZM1.11111 17.7778V1.11111C1.11111 0.816426 1.22817 0.533811 1.43655 0.325437C1.64492 0.117063 1.92754 0 2.22222 0H17.7778C18.0725 0 18.3551 0.117063 18.5635 0.325437C18.7718 0.533811 18.8889 0.816426 18.8889 1.11111V6.66667H21.1111V17.7778H22.2222V20H0V17.7778H1.11111ZM5.55556 8.88889V11.1111H7.77778V8.88889H5.55556ZM5.55556 13.3333V15.5556H7.77778V13.3333H5.55556ZM5.55556 4.44444V6.66667H7.77778V4.44444H5.55556Z" fill="#7C6A46"/>
+          </svg>
+          Room Types
+        </button>
+        <button @click="goToMaintenance" class="btn-quick">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M15.95 10.78C15.98 10.52 16 10.26 16 10C16 9.74 15.98 9.48 15.95 9.22L17.63 7.9C17.78 7.78 17.82 7.56 17.73 7.38L16.13 4.62C16.04 4.44 15.82 4.38 15.64 4.44L13.63 5.24C13.23 4.94 12.79 4.7 12.31 4.52L12 2.42C11.98 2.22 11.8 2.08 11.6 2.08H8.4C8.2 2.08 8.02 2.22 8 2.42L7.69 4.52C7.21 4.7 6.77 4.95 6.37 5.24L4.36 4.44C4.18 4.37 3.96 4.44 3.87 4.62L2.27 7.38C2.18 7.56 2.22 7.78 2.37 7.9L4.05 9.22C4.02 9.48 4 9.75 4 10C4 10.25 4.02 10.52 4.05 10.78L2.37 12.1C2.22 12.22 2.18 12.44 2.27 12.62L3.87 15.38C3.96 15.56 4.18 15.62 4.36 15.56L6.37 14.76C6.77 15.06 7.21 15.3 7.69 15.48L8 17.58C8.02 17.78 8.2 17.92 8.4 17.92H11.6C11.8 17.92 11.98 17.78 12 17.58L12.31 15.48C12.79 15.3 13.23 15.05 13.63 14.76L15.64 15.56C15.82 15.63 16.04 15.56 16.13 15.38L17.73 12.62C17.82 12.44 17.78 12.22 17.63 12.1L15.95 10.78ZM10 13C8.35 13 7 11.65 7 10C7 8.35 8.35 7 10 7C11.65 7 13 8.35 13 10C13 11.65 11.65 13 10 13Z" fill="#7C6A46"/>
+          </svg>
+          Maintenance
+        </button>
+        <button @click="goToStatistics" class="btn-quick">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM9 17H7V10H9V17ZM13 17H11V7H13V17ZM17 17H15V13H17V17Z" fill="#7C6A46"/>
+          </svg>
+          Statistics
+        </button>
+      </div>
     </div>
 
     <!-- Loading State -->
@@ -170,6 +192,18 @@ const goToEdit = (propertyId: string) => {
   router.push(`/property/edit/${propertyId}`)
 }
 
+const goToRoomTypes = () => {
+  router.push('/room-type')
+}
+
+const goToMaintenance = () => {
+  router.push('/maintenance')
+}
+
+const goToStatistics = () => {
+  router.push('/booking/chart')
+}
+
 const deleteProperty = async (propertyId: string) => {
   if (!confirm('Are you sure you want to delete this property?')) return
 
@@ -291,10 +325,19 @@ onMounted(() => {
   display: flex;
   gap: 15px;
   margin-bottom: 35px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.quick-actions {
+  display: flex;
+  gap: 12px;
+  margin-left: auto;
 }
 
 .btn-primary,
-.btn-secondary {
+.btn-secondary,
+.btn-quick {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -328,6 +371,21 @@ onMounted(() => {
 .btn-secondary:hover {
   background: #FAFAFA;
   transform: translateY(-2px);
+}
+
+.btn-quick {
+  background: white;
+  color: #7C6A46;
+  border: 2px solid #E0E0E0;
+  padding: 12px 20px;
+  font-size: 14px;
+}
+
+.btn-quick:hover {
+  background: #FAFAFA;
+  border-color: #7C6A46;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(124, 106, 70, 0.15);
 }
 
 /* Loading State */

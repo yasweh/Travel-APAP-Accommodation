@@ -56,14 +56,13 @@ onMounted(() => {
 
 <template>
   <div class="homepage">
-
     <!-- Hero Section -->
     <div class="hero-bg"></div>
     <div class="hero-section">
       <div class="hero-content-left">
-        <div class="brand-name">Paradise View</div>
+        <div class="brand-name">Travel Apap Accommodation</div>
         <div class="hero-title">Hotel for every moment rich in emotion</div>
-        <div class="hero-subtitle">Every moment feels like the first time in paradise view</div>
+        <div class="hero-subtitle">Every moment feels like the first time in Travel Apap Accommodation</div>
         <div class="hero-buttons">
           <div class="book-btn-hero" @click="navigateTo('/booking/create')">
             <div class="btn-bg-hero"></div>
@@ -246,7 +245,7 @@ onMounted(() => {
       <div class="testimonials-grid">
         <div class="testimonial-card">
           <div class="testimonial-rating">⭐⭐⭐⭐⭐</div>
-          <p class="testimonial-text">"The service at Paradise View was exceptional. The staff anticipated our needs and the rooms were incredibly comfortable."</p>
+          <p class="testimonial-text">"The service at Travel Apap Accommodation was exceptional. The staff anticipated our needs and the rooms were incredibly comfortable."</p>
           <div class="testimonial-author">- John Smith</div>
         </div>
         <div class="testimonial-card">
@@ -824,6 +823,91 @@ onMounted(() => {
   bottom: 16px;
   right: 27px;
   line-height: 1.3;
+}
+
+/* Auth Container */
+.auth-container {
+  position: fixed;
+  top: 20px;
+  right: 40px;
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  padding: 12px 20px;
+  border-radius: 50px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7C6A46 0%, #9B8A68 100%);
+  color: #FFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Poppins', sans-serif;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.user-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-name {
+  color: #1C1C1C;
+  font-family: 'Poppins', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.user-role {
+  color: #7C6A46;
+  font-family: 'Poppins', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.logout-btn,
+.login-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 25px;
+  background: linear-gradient(135deg, #7C6A46 0%, #9B8A68 100%);
+  color: #FFF;
+  font-family: 'Poppins', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 10px rgba(124, 106, 70, 0.2);
+}
+
+.logout-btn:hover,
+.login-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(124, 106, 70, 0.3);
+}
+
+.logout-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
 /* Testimonials Section */

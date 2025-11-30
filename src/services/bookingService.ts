@@ -41,7 +41,7 @@ export interface BookingRequestDTO {
   roomTypeId?: string
   checkInDate: string
   checkOutDate: string
-  customerId: string
+  customerId?: string // Optional - backend auto-generates from authenticated user
   customerName: string
   customerEmail: string
   customerPhone: string

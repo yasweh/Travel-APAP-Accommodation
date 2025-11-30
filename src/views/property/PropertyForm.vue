@@ -217,15 +217,13 @@
                 <optgroup v-if="formData.type === 1" label="Villa Room Types">
                   <option value="Luxury">Luxury</option>
                   <option value="Beachfront">Beachfront</option>
-                  <option value="Mountside">Mountside</option>
-                  <option value="Eco-friendly">Eco-friendly</option>
-                  <option value="Romantic">Romantic</option>
+                  <option value="Pool Villa">Pool Villa</option>
+                  <option value="Mountain View">Mountain View</option>
                 </optgroup>
                 <optgroup v-if="formData.type === 2" label="Apartment Room Types">
                   <option value="Studio">Studio</option>
-                  <option value="1BR">1BR</option>
-                  <option value="2BR">2BR</option>
-                  <option value="3BR">3BR</option>
+                  <option value="One Bedroom">One Bedroom</option>
+                  <option value="Two Bedroom">Two Bedroom</option>
                   <option value="Penthouse">Penthouse</option>
                 </optgroup>
               </select>
@@ -559,7 +557,21 @@ const submitForm = async () => {
     setTimeout(() => router.push('/property'), 1500)
   } catch (error: any) {
     console.error('Submit error:', error)
-    errorMessage.value = error.response?.data?.message || error.message || 'Failed to save property'
+    
+    // Handle detailed validation error from backend
+    if (error.response?.data) {
+      const errorData = error.response.data
+      
+      if (errorData.invalidRoomTypes && errorData.invalidRoomTypes.length > 0) {
+        errorMessage.value = `${errorData.message || 'Validation failed'}\n\n` +
+          `Invalid room types: ${errorData.invalidRoomTypes.join(', ')}\n\n` +
+          `Valid room types for ${errorData.propertyTypeString}: ${errorData.validRoomTypes?.join(', ') || 'N/A'}`
+      } else {
+        errorMessage.value = errorData.message || 'Failed to save property'
+      }
+    } else {
+      errorMessage.value = error.message || 'Failed to save property'
+    }
   } finally {
     submitting.value = false
   }
@@ -647,6 +659,7 @@ const submitForm = async () => {
   background: linear-gradient(135deg, #FFEBEE 0%, #FFCDD2 100%);
   border-left: 4px solid #F44336;
   color: #C62828;
+  white-space: pre-line;
 }
 
 .message-box.success {

@@ -182,30 +182,6 @@
         </div>
 
         <div class="form-group">
-          <label for="customerId">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M8 0C3.58 0 0 3.58 0 8C0 12.42 3.58 16 8 16C12.42 16 16 12.42 16 8C16 3.58 12.42 0 8 0Z" fill="#999"/>
-            </svg>
-            Customer ID (UUID)
-          </label>
-          <input
-            type="text"
-            id="customerId"
-            v-model="formData.customerId"
-            required
-            placeholder="Auto-generated UUID"
-            :disabled="true"
-            class="input-disabled"
-          />
-          <small class="helper-text">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M6 0C2.69 0 0 2.69 0 6C0 9.31 2.69 12 6 12C9.31 12 12 9.31 12 6C12 2.69 9.31 0 6 0Z" fill="#999"/>
-            </svg>
-            Auto-generated UUID for customer identification
-          </small>
-        </div>
-
-        <div class="form-group">
           <label for="customerName" class="required">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M8 0C5.79 0 4 1.79 4 4C4 6.21 5.79 8 8 8C10.21 8 12 6.21 12 4C12 1.79 10.21 0 8 0ZM8 10C5.33 10 0 11.34 0 14V16H16V14C16 11.34 10.67 10 8 10Z" fill="#7C6A46"/>
@@ -217,8 +193,16 @@
             id="customerName"
             v-model="formData.customerName"
             required
+            readonly
             placeholder="Enter customer name"
+            class="input-readonly"
           />
+          <small class="helper-text">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M6 0C2.69 0 0 2.69 0 6C0 9.31 2.69 12 6 12C9.31 12 12 9.31 12 6C12 2.69 9.31 0 6 0Z" fill="#999"/>
+            </svg>
+            Auto-filled from your account
+          </small>
         </div>
 
         <div class="form-row">
@@ -234,8 +218,16 @@
               id="customerEmail"
               v-model="formData.customerEmail"
               required
+              readonly
               placeholder="customer@example.com"
+              class="input-readonly"
             />
+            <small class="helper-text">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M6 0C2.69 0 0 2.69 0 6C0 9.31 2.69 12 6 12C9.31 12 12 9.31 12 6C12 2.69 9.31 0 6 0Z" fill="#999"/>
+              </svg>
+              Auto-filled from your account
+            </small>
           </div>
           <div class="form-group">
             <label for="customerPhone" class="required">
@@ -353,10 +345,12 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { bookingService, type BookingRequestDTO, type RoomDTO } from '@/services/bookingService'
+import { useAuthStore } from '@/stores/auth'
 import { v4 as uuidv4 } from 'uuid'
 
 const router = useRouter()
 const route = useRoute()
+const authStore = useAuthStore()
 
 const submitting = ref(false)
 const error = ref('')
@@ -378,9 +372,8 @@ const formData = reactive({
   roomId: prefilledRoomId || '',
   checkInDate: (route.query.checkIn as string) || '',
   checkOutDate: (route.query.checkOut as string) || '',
-  customerId: uuidv4(), // Auto-generate
-  customerName: '',
-  customerEmail: '',
+  customerName: authStore.user?.name || '',
+  customerEmail: authStore.user?.email || '',
   customerPhone: '',
   capacity: 1,
   addOnBreakfast: false,
@@ -513,7 +506,6 @@ const submitForm = async () => {
       roomTypeId: selectedRoomTypeId.value,
       checkInDate: formData.checkInDate,
       checkOutDate: formData.checkOutDate,
-      customerId: formData.customerId,
       customerName: formData.customerName,
       customerEmail: formData.customerEmail,
       customerPhone: formData.customerPhone,
@@ -820,6 +812,21 @@ const loadPrefilledRoom = async () => {
   font-family: 'Poppins', sans-serif;
   font-size: 0.85rem;
   color: #666;
+}
+
+.form-group .helper-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 0.8rem;
+  color: #999;
+}
+
+.input-readonly {
+  background-color: #f8f8f8 !important;
+  cursor: not-allowed;
+  color: #666 !important;
 }
 
 /* Room Details Grid */
