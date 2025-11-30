@@ -187,14 +187,14 @@ public class UnifiedBookingService {
                 UnifiedBookingDTO dto = new UnifiedBookingDTO();
                 dto.setSource("accommodation");
                 dto.setId(booking.getBookingId());
-                dto.setCustomerId(booking.getCustomerId());
+                dto.setCustomerId(booking.getCustomerId() != null ? booking.getCustomerId().toString() : null);
                 dto.setServiceName(booking.getPropertyName());
                 dto.setDescription("Room: " + booking.getRoomName() + " - " + booking.getRoomTypeName());
                 dto.setTotalPrice(booking.getTotalPrice());
                 dto.setStatus(getStatusText(booking.getStatus()));
                 dto.setStatusCode(booking.getStatus());
-                dto.setStartDate(booking.getCheckInDate());
-                dto.setEndDate(booking.getCheckOutDate());
+                dto.setStartDate(booking.getCheckInDate() != null ? booking.getCheckInDate().toString() : null);
+                dto.setEndDate(booking.getCheckOutDate() != null ? booking.getCheckOutDate().toString() : null);
                 dto.setRawData(booking);
                 
                 bookings.add(dto);

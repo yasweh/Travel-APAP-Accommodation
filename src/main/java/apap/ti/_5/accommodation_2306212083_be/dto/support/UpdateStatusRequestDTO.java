@@ -3,22 +3,24 @@ package apap.ti._5.accommodation_2306212083_be.dto.support;
 import apap.ti._5.accommodation_2306212083_be.enums.TicketStatus;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.UUID;
+
 /**
- * DTO for updating the status of a support ticket.
+ * Request DTO for updating ticket status
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
 public class UpdateStatusRequestDTO {
-
-    /**
-     * New status for the ticket
-     */
+    
     @NotNull(message = "Status is required")
     private TicketStatus status;
+    
+    @NotNull(message = "Updated by user ID is required")
+    private UUID updatedBy;
+    
+    private String reason;  // Optional reason for status change
 }

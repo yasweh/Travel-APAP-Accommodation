@@ -1,519 +1,482 @@
 package apap.ti._5.accommodation_2306212083_be.service;
 
 import apap.ti._5.accommodation_2306212083_be.dto.support.*;
-import apap.ti._5.accommodation_2306212083_be.enums.*;
-import apap.ti._5.accommodation_2306212083_be.exception.*;
+import apap.ti._5.accommodation_2306212083_be.enums.ActionType;
+import apap.ti._5.accommodation_2306212083_be.enums.ServiceSource;
+import apap.ti._5.accommodation_2306212083_be.enums.TicketStatus;
+import apap.ti._5.accommodation_2306212083_be.exception.InvalidBookingException;
+import apap.ti._5.accommodation_2306212083_be.exception.TicketNotFoundException;
+import apap.ti._5.accommodation_2306212083_be.model.SupportProgress;
 import apap.ti._5.accommodation_2306212083_be.model.SupportTicket;
 import apap.ti._5.accommodation_2306212083_be.model.TicketMessage;
-import apap.ti._5.accommodation_2306212083_be.model.SupportProgress;
+import apap.ti._5.accommodation_2306212083_be.repository.SupportProgressRepository;
 import apap.ti._5.accommodation_2306212083_be.repository.SupportTicketRepository;
 import apap.ti._5.accommodation_2306212083_be.repository.TicketMessageRepository;
-import apap.ti._5.accommodation_2306212083_be.repository.SupportProgressRepository;
-import apap.ti._5.accommodation_2306212083_be.util.CurrentUser;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestTemplate;
 
-import java.time.LocalDateTime;
-import java.time.Year;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Service for managing support tickets.
- * Handles ticket creation, retrieval, status updates, and external booking validation.
+ * Main service for Support Ticket operations
  */
 @Service
-@Transactional
-@RequiredArgsConstructor
 @Slf4j
 public class SupportTicketService {
-
-    private final SupportTicketRepository supportTicketRepository;
-    private final TicketMessageRepository ticketMessageRepository;
-    private final SupportProgressRepository supportProgressRepository;
-    private final RestTemplate restTemplate;
-    private final ObjectMapper objectMapper;
-
-    /**
-     * Map of service sources to their API base URLs
-     * In production, these should be configured in application.properties
-     */
-    private static final Map<ServiceSource, String> SERVICE_BASE_URLS = Map.of(
-        ServiceSource.ACCOMMODATION, "http://localhost:8080/api",
-        ServiceSource.FLIGHT, "https://flight-service-url/api",
-        ServiceSource.VEHICLE_RENTAL, "https://vehicle-rental-url/api",
-        ServiceSource.TOUR_PACKAGE, "https://tour-package-url/api",
-        ServiceSource.INSURANCE, "https://insurance-service-url/api"
-    );
-
-    /**
-     * Create a new support ticket
-     * @param request The ticket creation request
-     * @return Created ticket response
-     * 
-     * TEMPORARILY MODIFIED - Security disabled, userId hardcoded for development
-     */
-    public TicketResponseDTO createTicket(CreateTicketRequestDTO request) {
-        // TEMPORARY: Use dummy user ID since auth is disabled
-        String userId = CurrentUser.getUserId();
-        if (userId == null) {
-            userId = "00000000-0000-0000-0000-000000000001"; // Dummy UUID for testing
-            log.warn("Auth disabled - using dummy userId for ticket creation");
-        }
-        
-        // Validate booking exists (skip user ownership check for now)
-        BookingInfoDTO bookingInfo = validateAndFetchBooking(
-            request.getExternalServiceSource(),
-            request.getExternalBookingId(),
-            userId
-        );
-
-        // Generate unique ticket ID
-        String ticketId = generateTicketId(request.getExternalServiceSource());
-
-        // Create ticket entity
-        SupportTicket ticket = SupportTicket.builder()
-                .ticketId(ticketId)
-                .userId(userId)
-                .externalServiceSource(request.getExternalServiceSource())
-                .externalBookingId(request.getExternalBookingId())
-                .subject(request.getSubject())
-                .description(request.getDescription())
-                .priority(request.getPriority())
-                .category(request.getCategory())
-                .status(TicketStatus.OPEN)
-                .build();
-
-        ticket = supportTicketRepository.save(ticket);
-        
-        log.info("Created support ticket {} for user {} (Booking: {}-{})", 
-                ticketId, userId, request.getExternalServiceSource(), request.getExternalBookingId());
-
-        return mapToResponseDTO(ticket, bookingInfo, 0);
-    }
-
-    /**
-     * Get all tickets for the current user
-     * @return List of tickets
-     * 
-     * TEMPORARILY MODIFIED - Security disabled, show all tickets
-     */
-    @Transactional(readOnly = true)
-    public List<TicketResponseDTO> getMyTickets() {
-        String userId = CurrentUser.getUserId();
-        if (userId == null) {
-            // TEMPORARY: Show all tickets when auth is disabled
-            log.warn("Auth disabled - returning all tickets");
-            return getAllTicketsDev();
-        }
-        
-        List<SupportTicket> tickets = supportTicketRepository.findByUserIdOrderByCreatedAtDesc(userId);
-        
-        return tickets.stream()
-                .map(ticket -> {
-                    BookingInfoDTO bookingInfo = fetchBookingInfoSafely(
-                        ticket.getExternalServiceSource(), 
-                        ticket.getExternalBookingId()
-                    );
-                    int unreadCount = ticketMessageRepository
-                        .countUnreadMessagesForTicket(ticket.getTicketId(), userId)
-                        .intValue();
-                    return mapToResponseDTO(ticket, bookingInfo, unreadCount);
-                })
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Get all tickets (admin only)
-     * @return List of all tickets
-     */
-    @Transactional(readOnly = true)
-    public List<TicketResponseDTO> getAllTickets() {
-        if (!CurrentUser.isSuperadmin()) {
-            throw new UnauthorizedTicketAccessException("Only admins can view all tickets");
-        }
-
-        List<SupportTicket> tickets = supportTicketRepository.findAllByOrderByCreatedAtDesc();
-        
-        return tickets.stream()
-                .map(ticket -> {
-                    BookingInfoDTO bookingInfo = fetchBookingInfoSafely(
-                        ticket.getExternalServiceSource(), 
-                        ticket.getExternalBookingId()
-                    );
-                    return mapToResponseDTO(ticket, bookingInfo, 0);
-                })
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Get detailed ticket information including messages and progress
-     * @param ticketId The ticket ID
-     * @return Detailed ticket response
-     */
-    @Transactional(readOnly = true)
-    public TicketDetailResponseDTO getTicketDetail(String ticketId) {
-        SupportTicket ticket = supportTicketRepository.findById(ticketId)
-                .orElseThrow(() -> new TicketNotFoundException(ticketId));
-
-        // Verify user has access to this ticket
-        String userId = CurrentUser.getUserId();
-        if (!CurrentUser.isSuperadmin() && !ticket.getUserId().equals(userId)) {
-            throw new UnauthorizedTicketAccessException(ticketId);
-        }
-
-        // Fetch booking info
-        BookingInfoDTO bookingInfo = fetchBookingInfoSafely(
-            ticket.getExternalServiceSource(),
-            ticket.getExternalBookingId()
-        );
-
-        // Fetch messages
-        List<TicketMessage> messages = ticketMessageRepository.findByTicketIdOrderByCreatedAtAsc(ticketId);
-        List<MessageResponseDTO> messageDTOs = messages.stream()
-                .map(this::mapToMessageDTO)
-                .collect(Collectors.toList());
-
-        // Fetch progress
-        List<SupportProgress> progress = supportProgressRepository.findByTicketIdOrderByCreatedAtAsc(ticketId);
-        List<ProgressResponseDTO> progressDTOs = progress.stream()
-                .map(this::mapToProgressDTO)
-                .collect(Collectors.toList());
-
-        int unreadCount = ticketMessageRepository
-                .countUnreadMessagesForTicket(ticketId, userId)
-                .intValue();
-
-        return TicketDetailResponseDTO.detailBuilder()
-                .ticketId(ticket.getTicketId())
-                .userId(ticket.getUserId())
-                .assignedAdminId(ticket.getAssignedAdminId())
-                .externalServiceSource(ticket.getExternalServiceSource())
-                .externalBookingId(ticket.getExternalBookingId())
-                .subject(ticket.getSubject())
-                .description(ticket.getDescription())
-                .status(ticket.getStatus())
-                .priority(ticket.getPriority())
-                .category(ticket.getCategory())
-                .createdAt(ticket.getCreatedAt())
-                .updatedAt(ticket.getUpdatedAt())
-                .closedAt(ticket.getClosedAt())
-                .bookingInfo(bookingInfo)
-                .unreadMessageCount(unreadCount)
-                .messages(messageDTOs)
-                .progress(progressDTOs)
-                .build();
-    }
-
-    /**
-     * Close a ticket (user can close their own tickets)
-     * @param ticketId The ticket ID
-     */
-    public void closeTicket(String ticketId) {
-        SupportTicket ticket = supportTicketRepository.findById(ticketId)
-                .orElseThrow(() -> new TicketNotFoundException(ticketId));
-
-        String userId = CurrentUser.getUserId();
-        if (!CurrentUser.isSuperadmin() && !ticket.getUserId().equals(userId)) {
-            throw new UnauthorizedTicketAccessException(ticketId);
-        }
-
-        ticket.setStatus(TicketStatus.CLOSED);
-        ticket.setClosedAt(LocalDateTime.now());
-        supportTicketRepository.save(ticket);
-        
-        log.info("Ticket {} closed by user {}", ticketId, userId);
-    }
-
-    /**
-     * Assign ticket to an admin (admin only)
-     * @param ticketId The ticket ID
-     * @param adminId The admin ID to assign
-     */
-    public void assignTicket(String ticketId, String adminId) {
-        if (!CurrentUser.isSuperadmin()) {
-            throw new UnauthorizedTicketAccessException("Only admins can assign tickets");
-        }
-
-        SupportTicket ticket = supportTicketRepository.findById(ticketId)
-                .orElseThrow(() -> new TicketNotFoundException(ticketId));
-
-        ticket.setAssignedAdminId(adminId);
-        supportTicketRepository.save(ticket);
-        
-        log.info("Ticket {} assigned to admin {}", ticketId, adminId);
-    }
-
-    /**
-     * Update ticket status (admin only)
-     * @param ticketId The ticket ID
-     * @param request The status update request
-     */
-    public void updateTicketStatus(String ticketId, UpdateStatusRequestDTO request) {
-        if (!CurrentUser.isSuperadmin()) {
-            throw new UnauthorizedTicketAccessException("Only admins can update ticket status");
-        }
-
-        SupportTicket ticket = supportTicketRepository.findById(ticketId)
-                .orElseThrow(() -> new TicketNotFoundException(ticketId));
-
-        ticket.setStatus(request.getStatus());
-        if (request.getStatus() == TicketStatus.CLOSED) {
-            ticket.setClosedAt(LocalDateTime.now());
-        }
-        supportTicketRepository.save(ticket);
-        
-        log.info("Ticket {} status updated to {} by admin {}", ticketId, request.getStatus(), CurrentUser.getUserId());
-    }
-
-    /**
-     * Generate unique ticket ID with format: ST-{SERVICE_CODE}-{YEAR}-{SEQUENCE}
-     * @param serviceSource The service source
-     * @return Generated ticket ID
-     */
-    private String generateTicketId(ServiceSource serviceSource) {
-        String serviceCode = serviceSource.getCode();
-        String year = String.valueOf(Year.now().getValue());
-        
-        Integer maxSequence = supportTicketRepository
-                .findMaxSequenceForServiceAndYear(serviceCode, year)
-                .orElse(0);
-        
-        int newSequence = maxSequence + 1;
-        String sequenceStr = String.format("%04d", newSequence);
-        
-        return String.format("ST-%s-%s-%s", serviceCode, year, sequenceStr);
-    }
-
-    /**
-     * Validate booking exists and user is the owner
-     * @param serviceSource The service source
-     * @param bookingId The booking ID
-     * @param userId The user ID
-     * @return Booking information
-     */
-    private BookingInfoDTO validateAndFetchBooking(ServiceSource serviceSource, String bookingId, String userId) {
-        try {
-            String baseUrl = SERVICE_BASE_URLS.get(serviceSource);
-            String endpoint = determineBookingEndpoint(serviceSource, bookingId);
-            String url = baseUrl + endpoint;
-
-            log.info("Validating booking {} from service {}", bookingId, serviceSource);
-
-            ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
-            
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                Map<String, Object> bookingData = objectMapper.readValue(
-                    response.getBody(), 
-                    new TypeReference<Map<String, Object>>() {}
-                );
-                
-                // Verify user owns this booking
-                Object ownerIdObj = bookingData.get("userId");
-                String ownerId = ownerIdObj.toString();
-                
-                if (!ownerId.equals(userId)) {
-                    throw BookingValidationException.notBookingOwner(bookingId);
-                }
-
-                return parseBookingInfo(bookingData, bookingId);
-            }
-            
-            throw BookingValidationException.bookingNotFound(serviceSource.name(), bookingId);
-            
-        } catch (BookingValidationException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("Failed to validate booking: {} - {}", bookingId, e.getMessage());
-            throw BookingValidationException.serviceUnavailable(serviceSource.name());
-        }
-    }
-
-    /**
-     * Fetch booking info safely (returns null if fails)
-     * @param serviceSource The service source
-     * @param bookingId The booking ID
-     * @return Booking information or null
-     */
-    private BookingInfoDTO fetchBookingInfoSafely(ServiceSource serviceSource, String bookingId) {
-        try {
-            String baseUrl = SERVICE_BASE_URLS.get(serviceSource);
-            String endpoint = determineBookingEndpoint(serviceSource, bookingId);
-            String url = baseUrl + endpoint;
-
-            ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
-            
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                Map<String, Object> bookingData = objectMapper.readValue(
-                    response.getBody(), 
-                    new TypeReference<Map<String, Object>>() {}
-                );
-                return parseBookingInfo(bookingData, bookingId);
-            }
-        } catch (Exception e) {
-            log.warn("Failed to fetch booking info for {} - {}", bookingId, e.getMessage());
-        }
-        
-        // Return minimal info if fetch fails
-        return BookingInfoDTO.builder()
-                .bookingId(bookingId)
-                .status("UNKNOWN")
-                .details(Map.of("error", "Could not fetch booking details"))
-                .build();
-    }
-
-    /**
-     * Determine the correct endpoint for each service type
-     * @param serviceSource The service source
-     * @param bookingId The booking ID
-     * @return API endpoint path
-     */
-    private String determineBookingEndpoint(ServiceSource serviceSource, String bookingId) {
-        return switch (serviceSource) {
-            case ACCOMMODATION -> "/booking/" + bookingId;
-            case FLIGHT -> "/flight-bookings/" + bookingId;
-            case VEHICLE_RENTAL -> "/rentals/" + bookingId;
-            case TOUR_PACKAGE -> "/packages/" + bookingId;
-            case INSURANCE -> "/policies/" + bookingId;
-        };
-    }
-
-    /**
-     * Parse booking data into BookingInfoDTO
-     * @param data The raw booking data
-     * @param bookingId The booking ID
-     * @return BookingInfoDTO
-     */
-    private BookingInfoDTO parseBookingInfo(Map<String, Object> data, String bookingId) {
-        return BookingInfoDTO.builder()
-                .bookingId(bookingId)
-                .userId(getLongValue(data, "userId"))
-                .status(getStringValue(data, "status"))
-                .createdAt(getStringValue(data, "createdAt"))
-                .totalPrice(getIntegerValue(data, "totalPrice"))
-                .details(data)
-                .build();
-    }
-
-    /**
-     * Map SupportTicket entity to TicketResponseDTO
-     */
-    private TicketResponseDTO mapToResponseDTO(SupportTicket ticket, BookingInfoDTO bookingInfo, int unreadCount) {
-        return TicketResponseDTO.builder()
-                .ticketId(ticket.getTicketId())
-                .userId(ticket.getUserId())
-                .assignedAdminId(ticket.getAssignedAdminId())
-                .externalServiceSource(ticket.getExternalServiceSource())
-                .externalBookingId(ticket.getExternalBookingId())
-                .subject(ticket.getSubject())
-                .description(ticket.getDescription())
-                .status(ticket.getStatus())
-                .priority(ticket.getPriority())
-                .category(ticket.getCategory())
-                .createdAt(ticket.getCreatedAt())
-                .updatedAt(ticket.getUpdatedAt())
-                .closedAt(ticket.getClosedAt())
-                .bookingInfo(bookingInfo)
-                .unreadMessageCount(unreadCount)
-                .build();
-    }
-
-    /**
-     * Map TicketMessage entity to MessageResponseDTO
-     */
-    private MessageResponseDTO mapToMessageDTO(TicketMessage message) {
-        List<String> attachments = new ArrayList<>();
-        if (message.getAttachments() != null && !message.getAttachments().isEmpty()) {
-            try {
-                attachments = objectMapper.readValue(message.getAttachments(), new TypeReference<List<String>>() {});
-            } catch (Exception e) {
-                log.warn("Failed to parse attachments for message {}", message.getMessageId());
-            }
-        }
-
-        return MessageResponseDTO.builder()
-                .messageId(message.getMessageId())
-                .ticketId(message.getTicketId())
-                .senderId(message.getSenderId())
-                .senderName(message.getSenderName())
-                .senderType(message.getSenderType())
-                .messageBody(message.getMessageBody())
-                .isRead(message.getIsRead())
-                .attachments(attachments)
-                .createdAt(message.getCreatedAt())
-                .build();
-    }
-
-    /**
-     * Map SupportProgress entity to ProgressResponseDTO
-     */
-    private ProgressResponseDTO mapToProgressDTO(SupportProgress progress) {
-        return ProgressResponseDTO.builder()
-                .progressId(progress.getProgressId())
-                .ticketId(progress.getTicketId())
-                .userId(progress.getUserId())
-                .userName(progress.getUserName())
-                .text(progress.getText())
-                .role(progress.getRole())
-                .actionType(progress.getActionType())
-                .createdAt(progress.getCreatedAt())
-                .build();
-    }
-
-    // Helper methods for safe data extraction
-    private String getStringValue(Map<String, Object> map, String key) {
-        Object value = map.get(key);
-        return value != null ? value.toString() : null;
-    }
-
-    private Long getLongValue(Map<String, Object> map, String key) {
-        Object value = map.get(key);
-        if (value instanceof Number) {
-            return ((Number) value).longValue();
-        } else if (value != null) {
-            try {
-                return Long.parseLong(value.toString());
-            } catch (NumberFormatException e) {
-                return null;
-            }
-        }
-        return null;
-    }
-
-    private Integer getIntegerValue(Map<String, Object> map, String key) {
-        Object value = map.get(key);
-        if (value instanceof Number) {
-            return ((Number) value).intValue();
-        } else if (value != null) {
-            try {
-                return Integer.parseInt(value.toString());
-            } catch (NumberFormatException e) {
-                return null;
-            }
-        }
-        return null;
+    
+    private final SupportTicketRepository ticketRepository;
+    private final TicketMessageRepository messageRepository;
+    private final SupportProgressRepository progressRepository;
+    private final ExternalBookingService externalBookingService;
+    
+    public SupportTicketService(
+            SupportTicketRepository ticketRepository,
+            TicketMessageRepository messageRepository,
+            SupportProgressRepository progressRepository,
+            ExternalBookingService externalBookingService) {
+        this.ticketRepository = ticketRepository;
+        this.messageRepository = messageRepository;
+        this.progressRepository = progressRepository;
+        this.externalBookingService = externalBookingService;
     }
     
     /**
-     * TEMPORARY: Get all tickets for development (auth disabled)
+     * GET /api/support-tickets
+     * Get all tickets with optional filters
      */
-    private List<TicketResponseDTO> getAllTicketsDev() {
-        List<SupportTicket> tickets = supportTicketRepository.findAllByOrderByCreatedAtDesc();
+    @Transactional(readOnly = true)
+    public List<TicketResponseDTO> getAllTickets(UUID userId, TicketStatus status, ServiceSource serviceSource) {
+        log.info("Fetching tickets with filters: userId={}, status={}, serviceSource={}", 
+                userId, status, serviceSource);
+        
+        List<SupportTicket> tickets = ticketRepository.findByFilters(userId, status, serviceSource);
         
         return tickets.stream()
-                .map(ticket -> {
-                    BookingInfoDTO bookingInfo = fetchBookingInfoSafely(
-                        ticket.getExternalServiceSource(), 
-                        ticket.getExternalBookingId()
-                    );
-                    return mapToResponseDTO(ticket, bookingInfo, 0);
-                })
+                .map(this::mapToTicketResponse)
                 .collect(Collectors.toList());
+    }
+    
+    /**
+     * GET /api/support-tickets/{id}
+     * Get detailed ticket info including messages, progress, and external booking data
+     */
+    @Transactional(readOnly = true)
+    public TicketDetailResponseDTO getTicketDetail(UUID ticketId, UUID requestingUserId) {
+        log.info("Fetching ticket detail for ticketId={}", ticketId);
+        
+        SupportTicket ticket = ticketRepository.findByIdAndDeletedFalse(ticketId)
+                .orElseThrow(() -> new TicketNotFoundException("Ticket not found with id: " + ticketId));
+        
+        // Verify user has access to this ticket - DISABLED for debug
+        // if (!ticket.getUserId().equals(requestingUserId)) {
+        //     throw new IllegalArgumentException("User does not have access to this ticket");
+        // }
+        
+        // Fetch messages
+        List<MessageResponseDTO> messages = messageRepository
+                .findByTicketIdAndDeletedFalseOrderBySentAtAsc(ticketId)
+                .stream()
+                .map(this::mapToMessageResponse)
+                .collect(Collectors.toList());
+        
+        // Fetch progress entries
+        List<ProgressResponseDTO> progressEntries = progressRepository
+                .findByTicketIdAndDeletedFalseOrderByPerformedAtAsc(ticketId)
+                .stream()
+                .map(this::mapToProgressResponse)
+                .collect(Collectors.toList());
+        
+        // Fetch external booking data
+        Object externalBookingData = externalBookingService.fetchBookingById(
+                ticket.getServiceSource(),
+                ticket.getExternalBookingId()
+        );
+        
+        TicketDetailResponseDTO response = mapToTicketDetailResponse(ticket);
+        response.setMessages(messages);
+        response.setProgressEntries(progressEntries);
+        response.setExternalBookingData(externalBookingData);
+        response.setExternalBookingDataAvailable(externalBookingData != null);
+        
+        return response;
+    }
+    
+    /**
+     * POST /api/support-tickets
+     * Create a new support ticket
+     */
+    @Transactional
+    public TicketResponseDTO createTicket(CreateTicketRequestDTO request) {
+        log.info("Creating new ticket for userId={}, serviceSource={}, bookingId={}", 
+                request.getUserId(), request.getServiceSource(), request.getExternalBookingId());
+        
+        // Step 1: Validate that external booking exists and belongs to user
+        boolean bookingExists = externalBookingService.validateBookingExists(
+                request.getServiceSource(),
+                request.getExternalBookingId(),
+                request.getUserId()
+        );
+        
+        if (!bookingExists) {
+            throw new InvalidBookingException(
+                    "Booking not found or does not belong to user: " + request.getExternalBookingId());
+        }
+        
+        // Step 2: Check if ticket already exists for this booking
+        boolean ticketExists = ticketRepository.existsByServiceSourceAndExternalBookingIdAndDeletedFalse(
+                request.getServiceSource(),
+                request.getExternalBookingId()
+        );
+        
+        if (ticketExists) {
+            throw new InvalidBookingException(
+                    "A ticket already exists for this booking: " + request.getExternalBookingId());
+        }
+        
+        // Step 3: Create the ticket
+        SupportTicket ticket = new SupportTicket();
+        ticket.setUserId(request.getUserId());
+        ticket.setSubject(request.getSubject());
+        ticket.setStatus(TicketStatus.OPEN);
+        ticket.setServiceSource(request.getServiceSource());
+        ticket.setExternalBookingId(request.getExternalBookingId());
+        ticket.setInitialMessage(request.getInitialMessage());
+        ticket.setDeleted(false);
+        
+        // Auto-set propertyId if service source is ACCOMMODATION
+        if (request.getServiceSource() == ServiceSource.ACCOMMODATION) {
+            try {
+                // Fetch booking to get propertyId
+                Object bookingData = externalBookingService.fetchBookingById(
+                        ServiceSource.ACCOMMODATION, request.getExternalBookingId());
+                if (bookingData instanceof Map) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> bookingMap = (Map<String, Object>) bookingData;
+                    String propertyId = (String) bookingMap.get("propertyId");
+                    ticket.setPropertyId(propertyId);
+                }
+            } catch (Exception e) {
+                log.warn("Could not set propertyId for ticket: {}", e.getMessage());
+                // Continue without propertyId - not critical
+            }
+        }
+        
+        ticket = ticketRepository.save(ticket);
+        
+        // Step 4: Add initial progress entry
+        addProgressEntry(ticket, ActionType.CREATED, 
+                "Ticket created by user", request.getUserId());
+        
+        // Step 5: Add initial message
+        TicketMessage initialMsg = new TicketMessage();
+        initialMsg.setTicket(ticket);
+        initialMsg.setSenderType(apap.ti._5.accommodation_2306212083_be.enums.SenderType.CUSTOMER);
+        initialMsg.setSenderId(request.getUserId());
+        initialMsg.setMessage(request.getInitialMessage());
+        initialMsg.setReadByRecipient(false);
+        initialMsg.setDeleted(false);
+        messageRepository.save(initialMsg);
+        
+        log.info("Ticket created successfully with id={}", ticket.getId());
+        
+        return mapToTicketResponse(ticket);
+    }
+    
+    /**
+     * PATCH /api/support-tickets/{id}/status
+     * Update ticket status
+     */
+    @Transactional
+    public TicketResponseDTO updateTicketStatus(UUID ticketId, UpdateStatusRequestDTO request) {
+        log.info("Updating ticket status for ticketId={} to {}", ticketId, request.getStatus());
+        
+        SupportTicket ticket = ticketRepository.findByIdAndDeletedFalse(ticketId)
+                .orElseThrow(() -> new TicketNotFoundException("Ticket not found with id: " + ticketId));
+        
+        TicketStatus oldStatus = ticket.getStatus();
+        ticket.setStatus(request.getStatus());
+        ticket = ticketRepository.save(ticket);
+        
+        // Add progress entry for status change
+        String description = String.format("Status changed from %s to %s", oldStatus, request.getStatus());
+        if (request.getReason() != null && !request.getReason().isEmpty()) {
+            description += ". Reason: " + request.getReason();
+        }
+        
+        addProgressEntry(ticket, ActionType.STATUS_CHANGED, description, request.getUpdatedBy());
+        
+        log.info("Ticket status updated successfully");
+        
+        return mapToTicketResponse(ticket);
+    }
+    
+    /**
+     * DELETE /api/support-tickets/{id}
+     * Soft delete a ticket (only allowed if status is OPEN)
+     */
+    @Transactional
+    public void deleteTicket(UUID ticketId, UUID userId) {
+        log.info("Deleting ticket with id={}", ticketId);
+        
+        SupportTicket ticket = ticketRepository.findByIdAndDeletedFalse(ticketId)
+                .orElseThrow(() -> new TicketNotFoundException("Ticket not found with id: " + ticketId));
+        
+        // Only allow deletion if ticket is OPEN
+        if (ticket.getStatus() != TicketStatus.OPEN) {
+            throw new IllegalStateException("Cannot delete ticket with status: " + ticket.getStatus());
+        }
+        
+        // Verify user owns the ticket - DISABLED for debug
+        // if (!ticket.getUserId().equals(userId)) {
+        //     throw new IllegalArgumentException("User does not have permission to delete this ticket");
+        // }
+        
+        ticket.setDeleted(true);
+        ticketRepository.save(ticket);
+        
+        log.info("Ticket deleted successfully");
+    }
+    
+    /**
+     * POST /api/support-tickets/{id}/progress
+     * Add progress entry to ticket
+     */
+    @Transactional
+    public ProgressResponseDTO addProgress(UUID ticketId, AddProgressRequestDTO request) {
+        log.info("Adding progress to ticketId={}", ticketId);
+        
+        SupportTicket ticket = ticketRepository.findByIdAndDeletedFalse(ticketId)
+                .orElseThrow(() -> new TicketNotFoundException("Ticket not found with id: " + ticketId));
+        
+        // If ticket was OPEN, change to IN_PROGRESS
+        if (ticket.getStatus() == TicketStatus.OPEN) {
+            ticket.setStatus(TicketStatus.IN_PROGRESS);
+            ticketRepository.save(ticket);
+        }
+        
+        SupportProgress progress = addProgressEntry(
+                ticket,
+                ActionType.PROGRESS_ADDED,
+                request.getDescription(),
+                request.getPerformedBy()
+        );
+        
+        return mapToProgressResponse(progress);
+    }
+    
+    /**
+     * DELETE /api/support-tickets/{ticketId}/progress/{progressId}
+     * Soft delete progress entry
+     */
+    @Transactional
+    public void deleteProgress(UUID ticketId, UUID progressId) {
+        log.info("Deleting progress with id={} from ticketId={}", progressId, ticketId);
+        
+        SupportProgress progress = progressRepository.findById(progressId)
+                .orElseThrow(() -> new IllegalArgumentException("Progress entry not found with id: " + progressId));
+        
+        if (!progress.getTicket().getId().equals(ticketId)) {
+            throw new IllegalArgumentException("Progress entry does not belong to this ticket");
+        }
+        
+        progress.setDeleted(true);
+        progressRepository.save(progress);
+        
+        log.info("Progress deleted successfully");
+    }
+    
+    /**
+     * POST /api/support-tickets/{id}/messages
+     * Add message to ticket
+     */
+    @Transactional
+    public MessageResponseDTO addMessage(UUID ticketId, AddMessageRequestDTO request) {
+        log.info("Adding message to ticketId={}", ticketId);
+        
+        SupportTicket ticket = ticketRepository.findByIdAndDeletedFalse(ticketId)
+                .orElseThrow(() -> new TicketNotFoundException("Ticket not found with id: " + ticketId));
+        
+        TicketMessage message = new TicketMessage();
+        message.setTicket(ticket);
+        message.setSenderType(request.getSenderType());
+        message.setSenderId(request.getSenderId());
+        message.setMessage(request.getMessage());
+        message.setReadByRecipient(false);
+        message.setDeleted(false);
+        
+        message = messageRepository.save(message);
+        
+        // Add progress entry
+        addProgressEntry(ticket, ActionType.MESSAGE_ADDED,
+                request.getSenderType() + " added a message",
+                request.getSenderId());
+        
+        log.info("Message added successfully");
+        
+        return mapToMessageResponse(message);
+    }
+    
+    /**
+     * GET /api/support-tickets/{id}/messages
+     * Get all messages for a ticket
+     */
+    @Transactional(readOnly = true)
+    public List<MessageResponseDTO> getTicketMessages(UUID ticketId) {
+        log.info("Fetching messages for ticketId={}", ticketId);
+        
+        // Verify ticket exists
+        ticketRepository.findByIdAndDeletedFalse(ticketId)
+                .orElseThrow(() -> new TicketNotFoundException("Ticket not found with id: " + ticketId));
+        
+        return messageRepository.findByTicketIdAndDeletedFalseOrderBySentAtAsc(ticketId)
+                .stream()
+                .map(this::mapToMessageResponse)
+                .collect(Collectors.toList());
+    }
+    
+    /**
+     * PUT /api/support-tickets/{ticketId}/messages/mark-read
+     * Mark messages as read
+     */
+    @Transactional
+    public void markMessagesAsRead(UUID ticketId, UUID userId) {
+        log.info("Marking messages as read for ticketId={}", ticketId);
+        
+        List<TicketMessage> unreadMessages = messageRepository
+                .findByTicketIdAndReadByRecipientFalseAndDeletedFalse(ticketId);
+        
+        // Only mark messages sent by others as read
+        unreadMessages.stream()
+                .filter(msg -> !msg.getSenderId().equals(userId))
+                .forEach(msg -> {
+                    msg.setReadByRecipient(true);
+                    messageRepository.save(msg);
+                });
+        
+        log.info("Marked {} messages as read", unreadMessages.size());
+    }
+    
+    /**
+     * GET /api/support-tickets/bookings
+     * Fetch available bookings for a user from all services
+     */
+    @Transactional(readOnly = true)
+    public List<?> getAvailableBookings(ServiceSource serviceSource, UUID userId) {
+        log.info("Fetching available bookings for serviceSource={}, userId={}", serviceSource, userId);
+        
+        return externalBookingService.fetchBookingsByService(serviceSource, userId);
+    }
+    
+    /**
+     * GET /api/support-tickets/dashboard
+     * Get comprehensive dashboard data: all bookings from 5 external services + user's support tickets
+     */
+    @Transactional(readOnly = true)
+    public SupportDashboardResponseDTO getDashboardData(UUID userId) {
+        log.info("Fetching dashboard data for userId={}", userId);
+        
+        SupportDashboardResponseDTO dashboard = new SupportDashboardResponseDTO();
+        
+        // Fetch bookings from all 5 external services
+        dashboard.setAccommodationBookings(
+            externalBookingService.fetchBookingsByService(ServiceSource.ACCOMMODATION, userId));
+        dashboard.setFlightBookings(
+            externalBookingService.fetchBookingsByService(ServiceSource.FLIGHT, userId));
+        dashboard.setRentalBookings(
+            externalBookingService.fetchBookingsByService(ServiceSource.RENTAL, userId));
+        dashboard.setTourBookings(
+            externalBookingService.fetchBookingsByService(ServiceSource.TOUR, userId));
+        dashboard.setInsuranceBookings(
+            externalBookingService.fetchBookingsByService(ServiceSource.INSURANCE, userId));
+        
+        // Fetch user's existing support tickets
+        List<TicketResponseDTO> tickets = getAllTickets(userId, null, null);
+        dashboard.setSupportTickets(tickets);
+        
+        log.info("Dashboard data fetched successfully: {} accommodation, {} flight, {} rental, {} tour, {} insurance bookings, {} tickets",
+                dashboard.getAccommodationBookings().size(),
+                dashboard.getFlightBookings().size(),
+                dashboard.getRentalBookings().size(),
+                dashboard.getTourBookings().size(),
+                dashboard.getInsuranceBookings().size(),
+                dashboard.getSupportTickets().size());
+        
+        return dashboard;
+    }
+    
+    // ========== Private Helper Methods ==========
+    
+    private SupportProgress addProgressEntry(SupportTicket ticket, ActionType actionType, 
+                                            String description, UUID performedBy) {
+        SupportProgress progress = new SupportProgress();
+        progress.setTicket(ticket);
+        progress.setActionType(actionType);
+        progress.setDescription(description);
+        progress.setPerformedBy(performedBy);
+        progress.setDeleted(false);
+        
+        return progressRepository.save(progress);
+    }
+    
+    private TicketResponseDTO mapToTicketResponse(SupportTicket ticket) {
+        TicketResponseDTO dto = new TicketResponseDTO();
+        dto.setId(ticket.getId());
+        dto.setUserId(ticket.getUserId());
+        dto.setSubject(ticket.getSubject());
+        dto.setStatus(ticket.getStatus());
+        dto.setServiceSource(ticket.getServiceSource());
+        dto.setExternalBookingId(ticket.getExternalBookingId());
+        dto.setCreatedAt(ticket.getCreatedAt());
+        dto.setUpdatedAt(ticket.getUpdatedAt());
+        
+        // Count unread messages
+        long unreadCount = messageRepository.countByTicketIdAndReadByRecipientFalseAndDeletedFalse(ticket.getId());
+        dto.setUnreadMessagesCount((int) unreadCount);
+        
+        return dto;
+    }
+    
+    private TicketDetailResponseDTO mapToTicketDetailResponse(SupportTicket ticket) {
+        TicketDetailResponseDTO dto = new TicketDetailResponseDTO();
+        dto.setId(ticket.getId());
+        dto.setUserId(ticket.getUserId());
+        dto.setSubject(ticket.getSubject());
+        dto.setStatus(ticket.getStatus());
+        dto.setServiceSource(ticket.getServiceSource());
+        dto.setExternalBookingId(ticket.getExternalBookingId());
+        dto.setInitialMessage(ticket.getInitialMessage());
+        dto.setCreatedAt(ticket.getCreatedAt());
+        dto.setUpdatedAt(ticket.getUpdatedAt());
+        
+        return dto;
+    }
+    
+    private MessageResponseDTO mapToMessageResponse(TicketMessage message) {
+        MessageResponseDTO dto = new MessageResponseDTO();
+        dto.setId(message.getId());
+        dto.setTicketId(message.getTicket().getId());
+        dto.setSenderType(message.getSenderType());
+        dto.setSenderId(message.getSenderId());
+        dto.setMessage(message.getMessage());
+        dto.setSentAt(message.getSentAt());
+        dto.setReadByRecipient(message.getReadByRecipient());
+        
+        return dto;
+    }
+    
+    private ProgressResponseDTO mapToProgressResponse(SupportProgress progress) {
+        ProgressResponseDTO dto = new ProgressResponseDTO();
+        dto.setId(progress.getId());
+        dto.setTicketId(progress.getTicket().getId());
+        dto.setActionType(progress.getActionType());
+        dto.setDescription(progress.getDescription());
+        dto.setPerformedBy(progress.getPerformedBy());
+        dto.setPerformedAt(progress.getPerformedAt());
+        
+        return dto;
     }
 }

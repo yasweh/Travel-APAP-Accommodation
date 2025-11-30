@@ -1,92 +1,58 @@
 package apap.ti._5.accommodation_2306212083_be.model;
 
 import apap.ti._5.accommodation_2306212083_be.enums.SenderType;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
-import lombok.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
- * Entity representing a message in a support ticket conversation.
- * Messages can be sent by users, admins, or vendors.
+ * Message Entity for ticket chat/communication
  */
 @Entity
-@Table(name = "ticket_message")
+@Table(name = "ticket_messages")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
 public class TicketMessage {
-
-    /**
-     * Auto-generated unique message ID
-     */
+    
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "message_id")
-    private Long messageId;
-
-    /**
-     * The support ticket this message belongs to
-     */
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+    
+    @NotNull
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "ticket_id", nullable = false)
-    @JsonIgnore
-    private SupportTicket supportTicket;
-
-    /**
-     * ID of the user/admin/vendor who sent this message
-     */
-    @Column(name = "sender_id", nullable = false)
-    private String senderId;
-
-    /**
-     * Type of the sender (USER, ADMIN, or VENDOR)
-     */
+    private SupportTicket ticket;
+    
+    @NotNull
     @Enumerated(EnumType.STRING)
-    @Column(name = "sender_type", nullable = false, length = 10)
+    @Column(nullable = false, length = 20)
     private SenderType senderType;
-
-    /**
-     * Name of the sender for display purposes
-     */
-    @Column(name = "sender_name", length = 100)
-    private String senderName;
-
-    /**
-     * The message content
-     */
-    @Column(name = "message_body", nullable = false, columnDefinition = "TEXT")
-    private String messageBody;
-
-    /**
-     * Whether this message has been read by the recipient
-     */
-    @Column(name = "is_read", nullable = false)
-    @Builder.Default
-    private Boolean isRead = false;
-
-    /**
-     * JSON array of attachment URLs (optional)
-     */
-    @Column(name = "attachments", columnDefinition = "TEXT")
-    private String attachments;
-
-    /**
-     * Timestamp when the message was created
-     */
+    
+    @NotNull
+    @Column(nullable = false)
+    private UUID senderId; 
+    
+    @NotBlank
+    @Column(nullable = false, columnDefinition = "TEXT")
+    private String message;
+    
     @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
-    /**
-     * Helper method to get ticket ID without loading the entire ticket
-     */
-    @Transient
-    public String getTicketId() {
-        return supportTicket != null ? supportTicket.getTicketId() : null;
-    }
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime sentAt;
+    
+    @Column(nullable = false)
+    private Boolean readByRecipient = false;  // Track if message has been read
+    
+    @Column(nullable = false)
+    private Boolean deleted = false;  // Soft delete flag
 }

@@ -1,94 +1,29 @@
 package apap.ti._5.accommodation_2306212083_be.dto.support;
 
-import apap.ti._5.accommodation_2306212083_be.enums.*;
+import apap.ti._5.accommodation_2306212083_be.enums.ServiceSource;
+import apap.ti._5.accommodation_2306212083_be.enums.TicketStatus;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
- * DTO for basic support ticket responses.
+ * Response DTO for ticket list view
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
 public class TicketResponseDTO {
-
-    /**
-     * Unique ticket ID
-     */
-    private String ticketId;
-
-    /**
-     * User ID who created the ticket
-     */
-    private String userId;
-
-    /**
-     * Admin ID assigned to this ticket (if any)
-     */
-    private String assignedAdminId;
-
-    /**
-     * External service source
-     */
-    private ServiceSource externalServiceSource;
-
-    /**
-     * External booking ID
-     */
-    private String externalBookingId;
-
-    /**
-     * Ticket subject
-     */
+    
+    private UUID id;
+    private UUID userId;
     private String subject;
-
-    /**
-     * Ticket description
-     */
-    private String description;
-
-    /**
-     * Current status
-     */
     private TicketStatus status;
-
-    /**
-     * Priority level
-     */
-    private Priority priority;
-
-    /**
-     * Issue category
-     */
-    private Category category;
-
-    /**
-     * When the ticket was created
-     */
+    private ServiceSource serviceSource;
+    private String externalBookingId;
     private LocalDateTime createdAt;
-
-    /**
-     * When the ticket was last updated
-     */
     private LocalDateTime updatedAt;
-
-    /**
-     * When the ticket was closed (if closed)
-     */
-    private LocalDateTime closedAt;
-
-    /**
-     * Booking information from external service
-     */
-    private BookingInfoDTO bookingInfo;
-
-    /**
-     * Count of unread messages (for the current user)
-     */
-    private Integer unreadMessageCount;
+    private Integer unreadMessagesCount;
 }

@@ -338,11 +338,11 @@ public class PropertyServiceImpl implements PropertyService {
         
         return properties.stream()
             .map(property -> {
-                // Calculate total income from bookings with status=4 (done) in specified month/year
-                // Status: 0=Waiting, 1=Confirmed, 2=Cancelled, 3=Request Refund, 4=Done
+                // Calculate total income from bookings with status=1 (payment confirmed) in specified month/year
+                // Status: 0=Waiting, 1=Confirmed (Payment Confirmed), 2=Cancelled, 3=Request Refund, 4=Done
                 int totalIncome = bookingRepository.findByRoom_RoomType_Property_PropertyId(property.getPropertyId())
                     .stream()
-                    .filter(booking -> booking.getStatus() == 4) // Done status (NEW)
+                    .filter(booking -> booking.getStatus() == 1) // Confirmed (Payment Confirmed)
                     .filter(booking -> {
                         LocalDateTime checkIn = booking.getCheckInDate();
                         return checkIn.getMonthValue() == month && checkIn.getYear() == year;
@@ -352,7 +352,7 @@ public class PropertyServiceImpl implements PropertyService {
                 
                 long bookingCount = bookingRepository.findByRoom_RoomType_Property_PropertyId(property.getPropertyId())
                     .stream()
-                    .filter(booking -> booking.getStatus() == 4) // Done status (NEW)
+                    .filter(booking -> booking.getStatus() == 1) // Confirmed (Payment Confirmed)
                     .filter(booking -> {
                         LocalDateTime checkIn = booking.getCheckInDate();
                         return checkIn.getMonthValue() == month && checkIn.getYear() == year;

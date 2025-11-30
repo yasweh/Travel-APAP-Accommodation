@@ -1,30 +1,28 @@
 package apap.ti._5.accommodation_2306212083_be.dto.support;
 
+import apap.ti._5.accommodation_2306212083_be.enums.SenderType;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.List;
+import java.util.UUID;
 
 /**
- * DTO for adding a message to a support ticket.
+ * Request DTO for adding a message to ticket
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
 public class AddMessageRequestDTO {
-
-    /**
-     * The message content
-     */
-    @NotBlank(message = "Message body is required")
-    private String messageBody;
-
-    /**
-     * Optional list of attachment URLs
-     */
-    private List<String> attachments;
+    
+    @NotNull(message = "Sender ID is required")
+    private UUID senderId;
+    
+    @NotNull(message = "Sender type is required")
+    private SenderType senderType;
+    
+    @NotBlank(message = "Message is required")
+    private String message;
 }

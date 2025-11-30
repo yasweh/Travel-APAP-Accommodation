@@ -1,16 +1,20 @@
 package apap.ti._5.accommodation_2306212083_be.model;
 
 import apap.ti._5.accommodation_2306212083_be.enums.ActionType;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
-import lombok.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
- * Entity representing progress updates on a support ticket.
- * Progress can be added by admins or vendors to track resolution steps.
+ * Progress/Timeline Entry Entity for ticket
  */
 @Entity
 @Table(name = "support_progress")
@@ -18,68 +22,33 @@ import java.time.LocalDateTime;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
 public class SupportProgress {
-
-    /**
-     * Auto-generated unique progress ID
-     */
+    
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "progress_id")
-    private Long progressId;
-
-    /**
-     * The support ticket this progress update belongs to
-     */
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+    
+    @NotNull
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "ticket_id", nullable = false)
-    @JsonIgnore
-    private SupportTicket supportTicket;
-
-    /**
-     * ID of the admin/vendor who created this progress update
-     */
-    @Column(name = "user_id", nullable = false)
-    private String userId;
-
-    /**
-     * Name of the user who created the progress update
-     */
-    @Column(name = "user_name", length = 100)
-    private String userName;
-
-    /**
-     * Description of the progress action taken
-     */
-    @Column(name = "text", nullable = false, columnDefinition = "TEXT")
-    private String text;
-
-    /**
-     * Role of the person creating the progress (e.g., "SUPERADMIN", "ACCOMMODATION_OWNER")
-     */
-    @Column(name = "role", nullable = false, length = 50)
-    private String role;
-
-    /**
-     * Type of action taken
-     */
+    private SupportTicket ticket;
+    
+    @NotNull
     @Enumerated(EnumType.STRING)
-    @Column(name = "action_type", nullable = false, length = 30)
+    @Column(nullable = false, length = 50)
     private ActionType actionType;
-
-    /**
-     * Timestamp when the progress was created
-     */
+    
+    @NotBlank
+    @Column(nullable = false, columnDefinition = "TEXT")
+    private String description;
+    
+    @Column(nullable = false)
+    private UUID performedBy;  // userId who performed this action
+    
     @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
-    /**
-     * Helper method to get ticket ID without loading the entire ticket
-     */
-    @Transient
-    public String getTicketId() {
-        return supportTicket != null ? supportTicket.getTicketId() : null;
-    }
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime performedAt;
+    
+    @Column(nullable = false)
+    private Boolean deleted = false;  // Soft delete flag
 }

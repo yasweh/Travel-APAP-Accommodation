@@ -6,16 +6,13 @@ import apap.ti._5.accommodation_2306212083_be.model.Maintenance;
 import apap.ti._5.accommodation_2306212083_be.model.Property;
 import apap.ti._5.accommodation_2306212083_be.model.Room;
 import apap.ti._5.accommodation_2306212083_be.model.RoomType;
-import apap.ti._5.accommodation_2306212083_be.security.annotations.IsOwner;
 import apap.ti._5.accommodation_2306212083_be.service.MaintenanceService;
-import apap.ti._5.accommodation_2306212083_be.service.OwnerValidationService;
 import apap.ti._5.accommodation_2306212083_be.repository.RoomRepository;
+import apap.ti._5.accommodation_2306212083_be.util.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -25,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/property/maintenance")
@@ -33,14 +31,13 @@ public class MaintenanceController {
 
     private final MaintenanceService maintenanceService;
     private final RoomRepository roomRepository;
-    private final OwnerValidationService ownerValidationService;
 
     /**
      * POST /api/property/maintenance/add - Add maintenance schedule
      * Requires: ACCOMMODATION_OWNER (own property) or SUPERADMIN role
      */
     @PostMapping("/add")
-    @IsOwner
+    @PreAuthorize("hasAnyAuthority('Superadmin', 'Accommodation Owner')")
     public ResponseEntity<Map<String, Object>> addMaintenance(@RequestBody Map<String, Object> request) {
         try {
             String roomId = (String) request.get("roomId");
@@ -53,8 +50,14 @@ public class MaintenanceController {
             Room room = roomRepository.findById(roomId)
                 .orElseThrow(() -> new RuntimeException("Room not found"));
             
-            // Use OwnerValidationService to validate room ownership
-            ownerValidationService.validateRoomOwnership(room);
+            // Validate ownership - Owner can only schedule maintenance for their properties
+            if (!SecurityUtil.isSuperadmin()) {
+                UserPrincipal currentUser = SecurityUtil.getCurrentUser();
+                Property property = room.getRoomType().getProperty();
+                if (!property.getOwnerId().toString().equals(currentUser.getUserId())) {
+                    throw new RuntimeException("Access denied: You can only schedule maintenance for your properties");
+                }
+            }
             
             // Parse dates and times
             LocalDate startDate = LocalDate.parse(startDateStr);
@@ -93,27 +96,26 @@ public class MaintenanceController {
      * SUPERADMIN: shows all maintenance
      */
     @GetMapping
-    @IsOwner
+    @PreAuthorize("hasAnyAuthority('Superadmin', 'Accommodation Owner')")
     public ResponseEntity<Map<String, Object>> getAllMaintenance() {
         try {
-            UserPrincipal user = ownerValidationService.getCurrentUser();
+            UserPrincipal currentUser = SecurityUtil.getCurrentUser();
             List<MaintenanceDTO> maintenanceList = maintenanceService.getAllMaintenance();
             
             // Filter by owner if not superadmin
-            // TODO: Fix filtering for DTOs
-            /*
-            if (ownerValidationService.isOwner() && !ownerValidationService.isSuperadmin()) {
-                UUID ownerUuid = UUID.fromString(user.getUserId());
+            if (SecurityUtil.isAccommodationOwner()) {
+                UUID ownerUuid = UUID.fromString(currentUser.getUserId());
                 maintenanceList = maintenanceList.stream()
                     .filter(maintenance -> {
-                        Room room = maintenance.getRoom();
+                        // Get room from repository using roomId from DTO
+                        Room room = roomRepository.findById(maintenance.getRoomId()).orElse(null);
+                        if (room == null) return false;
                         RoomType roomType = room.getRoomType();
                         Property property = roomType.getProperty();
                         return property.getOwnerId().equals(ownerUuid);
                     })
                     .collect(Collectors.toList());
             }
-            */
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -134,7 +136,7 @@ public class MaintenanceController {
      * SUPERADMIN: can view any
      */
     @GetMapping("/room-type/{roomTypeId}")
-    @IsOwner
+    @PreAuthorize("hasAnyAuthority('Superadmin', 'Accommodation Owner')")
     public ResponseEntity<Map<String, Object>> getMaintenanceByRoomType(@PathVariable String roomTypeId) {
         try {
             List<MaintenanceDTO> maintenanceList = maintenanceService.getMaintenanceByRoomTypeId(roomTypeId);
@@ -173,13 +175,20 @@ public class MaintenanceController {
      * SUPERADMIN: can view any
      */
     @GetMapping("/room/{roomId}")
-    @IsOwner
+    @PreAuthorize("hasAnyAuthority('Superadmin', 'Accommodation Owner')")
     public ResponseEntity<Map<String, Object>> getMaintenanceByRoom(@PathVariable String roomId) {
         try {
             // Validate room ownership first
             Room room = roomRepository.findById(roomId)
                 .orElseThrow(() -> new RuntimeException("Room not found"));
-            ownerValidationService.validateRoomOwnership(room);
+            
+            if (!SecurityUtil.isSuperadmin()) {
+                UserPrincipal currentUser = SecurityUtil.getCurrentUser();
+                Property property = room.getRoomType().getProperty();
+                if (!property.getOwnerId().toString().equals(currentUser.getUserId())) {
+                    throw new RuntimeException("Access denied");
+                }
+            }
             
             List<MaintenanceDTO> maintenanceList = maintenanceService.getMaintenanceByRoomId(roomId);
             

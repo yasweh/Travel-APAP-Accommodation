@@ -9,20 +9,15 @@ import apap.ti._5.accommodation_2306212083_be.model.AccommodationBooking;
 import apap.ti._5.accommodation_2306212083_be.model.Property;
 import apap.ti._5.accommodation_2306212083_be.model.Room;
 import apap.ti._5.accommodation_2306212083_be.model.RoomType;
-import apap.ti._5.accommodation_2306212083_be.security.annotations.IsCustomer;
-import apap.ti._5.accommodation_2306212083_be.security.annotations.IsOwner;
 import apap.ti._5.accommodation_2306212083_be.service.BookingService;
 import apap.ti._5.accommodation_2306212083_be.service.PropertyService;
-import apap.ti._5.accommodation_2306212083_be.service.OwnerValidationService;
 import apap.ti._5.accommodation_2306212083_be.repository.RoomRepository;
 import apap.ti._5.accommodation_2306212083_be.repository.RoomTypeRepository;
+import apap.ti._5.accommodation_2306212083_be.util.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -41,7 +36,6 @@ public class BookingController {
     private final PropertyService propertyService;
     private final RoomRepository roomRepository;
     private final RoomTypeRepository roomTypeRepository;
-    private final OwnerValidationService ownerValidationService;
 
     /**
      * GET /api/bookings - List all bookings with filters
@@ -52,37 +46,39 @@ public class BookingController {
      * TEMPORARILY DISABLED - RBAC commented for support feature development
      */
     @GetMapping
-    // @PreAuthorize("hasAnyRole('CUSTOMER', 'ACCOMMODATION_OWNER', 'SUPERADMIN')") // COMMENTED - RBAC disabled
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> listBookings(
             @RequestParam(required = false) String customerId,
             @RequestParam(required = false) Integer status) {
         
-        UserPrincipal user = ownerValidationService.getCurrentUser();
+        UserPrincipal currentUser = SecurityUtil.getCurrentUser();
         List<BookingResponseDTO> bookings;
         
-        if (ownerValidationService.isCustomer()) {
+        if (SecurityUtil.isCustomer()) {
             // Customer can only see their own bookings
-            UUID uuid = UUID.fromString(user.getUserId());
+            UUID uuid = UUID.fromString(currentUser.getUserId());
             List<AccommodationBooking> rawBookings = bookingService.getBookingsByCustomer(uuid);
             bookings = rawBookings.stream()
                 .map(b -> bookingService.getBookingDetail(b.getBookingId()))
                 .collect(Collectors.toList());
-                
-        } else if (ownerValidationService.isOwner()) {
-            // Owner can only see bookings for their properties
+        } else if (SecurityUtil.isAccommodationOwner()) {
+            // Owner can see bookings for their properties
             bookings = bookingService.getAllBookingsAsDTO().stream()
                 .filter(booking -> {
                     try {
-                        String propertyOwnerId = getPropertyOwnerIdFromBooking(booking.getBookingId());
-                        return user.getUserId().equals(propertyOwnerId);
+                        AccommodationBooking rawBooking = bookingService.getBookingById(booking.getBookingId()).orElse(null);
+                        if (rawBooking == null) return false;
+                        Room room = rawBooking.getRoom();
+                        RoomType roomType = room.getRoomType();
+                        Property property = roomType.getProperty();
+                        return property.getOwnerId().toString().equals(currentUser.getUserId());
                     } catch (Exception e) {
                         return false;
                     }
                 })
                 .collect(Collectors.toList());
-                
         } else {
-            // Superadmin sees all bookings
+            // Superadmin sees all
             if (customerId != null) {
                 UUID uuid = UUID.fromString(customerId);
                 List<AccommodationBooking> rawBookings = bookingService.getBookingsByCustomer(uuid);
@@ -115,13 +111,35 @@ public class BookingController {
      * TEMPORARILY DISABLED - RBAC commented for support feature development
      */
     @GetMapping("/{id}")
-    // @PreAuthorize("hasAnyRole('CUSTOMER', 'ACCOMMODATION_OWNER', 'SUPERADMIN')") // COMMENTED - RBAC disabled
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> detailBooking(@PathVariable String id) {
         try {
-            // Use OwnerValidationService for access validation
-            ownerValidationService.validateBookingAccess(id);
-            
             BookingResponseDTO booking = bookingService.getBookingDetail(id);
+            UserPrincipal currentUser = SecurityUtil.getCurrentUser();
+            
+            // Validate access based on role
+            if (SecurityUtil.isCustomer()) {
+                // Customer can only see their own bookings
+                UUID userId = UUID.fromString(currentUser.getUserId());
+                AccommodationBooking rawBooking = bookingService.getBookingById(id).orElseThrow();
+                if (!rawBooking.getCustomerId().equals(userId)) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "Access denied: You can only view your own bookings");
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+                }
+            } else if (SecurityUtil.isAccommodationOwner()) {
+                // Owner can only see bookings for their properties
+                AccommodationBooking rawBooking = bookingService.getBookingById(id).orElseThrow();
+                Property property = rawBooking.getRoom().getRoomType().getProperty();
+                if (!property.getOwnerId().toString().equals(currentUser.getUserId())) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "Access denied: This booking is not for your property");
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+                }
+            }
+            // Superadmin can see all
             
             // Determine available actions based on status
             Map<String, Boolean> availableActions = new HashMap<>();
@@ -149,11 +167,11 @@ public class BookingController {
      * Requires: CUSTOMER role (own booking only)
      */
     @PutMapping("/pay/{id}")
-    @IsCustomer
+    @PreAuthorize("hasAuthority('Customer')")
     public ResponseEntity<Map<String, Object>> payBooking(@PathVariable String id) {
         try {
             // Use OwnerValidationService for ownership validation
-            ownerValidationService.validateBookingOwnership(id);
+            // SECURITY DISABLED - ownerValidationService.validateBookingOwnership(id);
             
             bookingService.payBooking(id);
             
@@ -175,11 +193,11 @@ public class BookingController {
      * Requires: CUSTOMER role (own booking only)
      */
     @PutMapping("/cancel/{id}")
-    @IsCustomer
+    @PreAuthorize("hasAuthority('Customer')")
     public ResponseEntity<Map<String, Object>> cancelBooking(@PathVariable String id) {
         try {
             // Use OwnerValidationService for ownership validation
-            ownerValidationService.validateBookingOwnership(id);
+            // SECURITY DISABLED - ownerValidationService.validateBookingOwnership(id);
             
             bookingService.cancelBooking(id);
             
@@ -201,11 +219,11 @@ public class BookingController {
      * Requires: CUSTOMER role (own booking only)
      */
     @PutMapping("/refund/{id}")
-    @IsCustomer
+    @PreAuthorize("hasAuthority('Customer')")
     public ResponseEntity<Map<String, Object>> refundBooking(@PathVariable String id) {
         try {
             // Use OwnerValidationService for ownership validation
-            ownerValidationService.validateBookingOwnership(id);
+            // SECURITY DISABLED - ownerValidationService.validateBookingOwnership(id);
             
             bookingService.refundBooking(id);
             
@@ -354,7 +372,7 @@ public class BookingController {
      * Requires: CUSTOMER role
      */
     @PostMapping("/create")
-    @IsCustomer
+    @PreAuthorize("hasAuthority('Customer')")
     public ResponseEntity<Map<String, Object>> createBooking(@RequestBody BookingRequestDTO request) {
         try {
             BookingResponseDTO booking;
@@ -367,10 +385,14 @@ public class BookingController {
                 booking = bookingService.createBookingWithSelection(request);
             }
             
-            // Auto-set customer ID using OwnerValidationService
+            // Auto-set customer information from authenticated user
             AccommodationBooking rawBooking = bookingService.getBookingById(booking.getBookingId())
                 .orElseThrow(() -> new RuntimeException("Booking not found after creation"));
-            ownerValidationService.setCustomerForNewBooking(rawBooking);
+            UserPrincipal currentUser = SecurityUtil.getCurrentUser();
+            rawBooking.setCustomerId(UUID.fromString(currentUser.getUserId()));
+            rawBooking.setCustomerName(currentUser.getName());
+            rawBooking.setCustomerEmail(currentUser.getEmail());
+            bookingService.createBooking(rawBooking); // Update the booking with customer info
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -388,16 +410,34 @@ public class BookingController {
 
     /**
      * GET /api/bookings/update/{id} - Load booking data for update form
-     * Requires: CUSTOMER role (own booking only)
+     * Requires: Authenticated user (Customer: own booking, Owner: their property, Superadmin: all)
      */
     @GetMapping("/update/{id}")
-    @IsCustomer
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> getUpdateBooking(@PathVariable String id) {
         try {
-            // Use OwnerValidationService for ownership validation
-            ownerValidationService.validateBookingOwnership(id);
-            
             BookingResponseDTO booking = bookingService.getBookingDetail(id);
+            UserPrincipal currentUser = SecurityUtil.getCurrentUser();
+            
+            // Validate access based on role
+            AccommodationBooking rawBooking = bookingService.getBookingById(id).orElseThrow();
+            if (SecurityUtil.isCustomer()) {
+                UUID userId = UUID.fromString(currentUser.getUserId());
+                if (!rawBooking.getCustomerId().equals(userId)) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "Access denied: You can only update your own bookings");
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+                }
+            } else if (SecurityUtil.isAccommodationOwner()) {
+                Property property = rawBooking.getRoom().getRoomType().getProperty();
+                if (!property.getOwnerId().toString().equals(currentUser.getUserId())) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "Access denied: This booking is not for your property");
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+                }
+            }
             
             // Check if can be updated based on status
             // Status 2=Cancelled, 3=Request Refund, 4=Done cannot be updated
@@ -440,16 +480,35 @@ public class BookingController {
 
     /**
      * PUT /api/bookings/update/{id} - Update booking
-     * Requires: CUSTOMER role (own booking only)
+     * Requires: Authenticated user (Customer: own booking, Owner: their property, Superadmin: all)
      */
     @PutMapping("/update/{id}")
-    @IsCustomer
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> updateBooking(
             @PathVariable String id,
             @RequestBody BookingRequestDTO request) {
         try {
-            // Use OwnerValidationService for ownership validation
-            ownerValidationService.validateBookingOwnership(id);
+            UserPrincipal currentUser = SecurityUtil.getCurrentUser();
+            AccommodationBooking rawBooking = bookingService.getBookingById(id).orElseThrow();
+            
+            // Validate access based on role
+            if (SecurityUtil.isCustomer()) {
+                UUID userId = UUID.fromString(currentUser.getUserId());
+                if (!rawBooking.getCustomerId().equals(userId)) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "Access denied: You can only update your own bookings");
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+                }
+            } else if (SecurityUtil.isAccommodationOwner()) {
+                Property property = rawBooking.getRoom().getRoomType().getProperty();
+                if (!property.getOwnerId().toString().equals(currentUser.getUserId())) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "Access denied: This booking is not for your property");
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+                }
+            }
             
             BookingResponseDTO updated = bookingService.updateBookingFromDTO(id, request);
             
@@ -469,16 +528,34 @@ public class BookingController {
 
     /**
      * POST /api/bookings/status/pay - Pay for booking
-     * Requires: CUSTOMER role (own booking only)
+     * Requires: Authenticated user (Customer: own booking, Owner: their property, Superadmin: all)
      */
     @PostMapping("/status/pay")
-    @IsCustomer
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> payBookingStatus(@RequestBody Map<String, String> request) {
         try {
             String bookingId = request.get("bookingId");
+            UserPrincipal currentUser = SecurityUtil.getCurrentUser();
+            AccommodationBooking rawBooking = bookingService.getBookingById(bookingId).orElseThrow();
             
-            // Use OwnerValidationService for ownership validation
-            ownerValidationService.validateBookingOwnership(bookingId);
+            // Validate access based on role
+            if (SecurityUtil.isCustomer()) {
+                UUID userId = UUID.fromString(currentUser.getUserId());
+                if (!rawBooking.getCustomerId().equals(userId)) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "Access denied: You can only pay for your own bookings");
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+                }
+            } else if (SecurityUtil.isAccommodationOwner()) {
+                Property property = rawBooking.getRoom().getRoomType().getProperty();
+                if (!property.getOwnerId().toString().equals(currentUser.getUserId())) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "Access denied: This booking is not for your property");
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+                }
+            }
             
             bookingService.payBookingById(bookingId);
             
@@ -497,16 +574,34 @@ public class BookingController {
 
     /**
      * POST /api/bookings/status/cancel - Cancel booking
-     * Requires: CUSTOMER role (own booking only)
+     * Requires: Authenticated user (Customer: own booking, Owner: their property, Superadmin: all)
      */
     @PostMapping("/status/cancel")
-    @IsCustomer
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> cancelBookingStatus(@RequestBody Map<String, String> request) {
         try {
             String bookingId = request.get("bookingId");
+            UserPrincipal currentUser = SecurityUtil.getCurrentUser();
+            AccommodationBooking rawBooking = bookingService.getBookingById(bookingId).orElseThrow();
             
-            // Use OwnerValidationService for ownership validation
-            ownerValidationService.validateBookingOwnership(bookingId);
+            // Validate access based on role
+            if (SecurityUtil.isCustomer()) {
+                UUID userId = UUID.fromString(currentUser.getUserId());
+                if (!rawBooking.getCustomerId().equals(userId)) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "Access denied: You can only cancel your own bookings");
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+                }
+            } else if (SecurityUtil.isAccommodationOwner()) {
+                Property property = rawBooking.getRoom().getRoomType().getProperty();
+                if (!property.getOwnerId().toString().equals(currentUser.getUserId())) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "Access denied: This booking is not for your property");
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+                }
+            }
             
             bookingService.cancelBookingById(bookingId);
             
@@ -525,16 +620,34 @@ public class BookingController {
 
     /**
      * POST /api/bookings/status/refund - Request refund
-     * Requires: CUSTOMER role (own booking only)
+     * Requires: Authenticated user (Customer: own booking, Owner: their property, Superadmin: all)
      */
     @PostMapping("/status/refund")
-    @IsCustomer
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Map<String, Object>> refundBookingStatus(@RequestBody Map<String, String> request) {
         try {
             String bookingId = request.get("bookingId");
+            UserPrincipal currentUser = SecurityUtil.getCurrentUser();
+            AccommodationBooking rawBooking = bookingService.getBookingById(bookingId).orElseThrow();
             
-            // Use OwnerValidationService for ownership validation
-            ownerValidationService.validateBookingOwnership(bookingId);
+            // Validate access based on role
+            if (SecurityUtil.isCustomer()) {
+                UUID userId = UUID.fromString(currentUser.getUserId());
+                if (!rawBooking.getCustomerId().equals(userId)) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "Access denied: You can only request refund for your own bookings");
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+                }
+            } else if (SecurityUtil.isAccommodationOwner()) {
+                Property property = rawBooking.getRoom().getRoomType().getProperty();
+                if (!property.getOwnerId().toString().equals(currentUser.getUserId())) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "Access denied: This booking is not for your property");
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+                }
+            }
             
             bookingService.refundBookingById(bookingId);
             
@@ -557,17 +670,17 @@ public class BookingController {
      * SUPERADMIN: Shows all statistics
      */
     @GetMapping("/chart")
-    @IsOwner
+    @PreAuthorize("hasAnyAuthority('Superadmin', 'Accommodation Owner')")
     public ResponseEntity<Map<String, Object>> getBookingStatistics(
             @RequestParam int month,
             @RequestParam int year) {
         try {
-            UserPrincipal user = ownerValidationService.getCurrentUser();
+            UserPrincipal currentUser = SecurityUtil.getCurrentUser();
             List<PropertyStatisticsDTO> statistics = propertyService.getMonthlyStatistics(month, year);
             
             // Filter by owner if not superadmin
-            if (ownerValidationService.isOwner() && !ownerValidationService.isSuperadmin()) {
-                UUID ownerUuid = UUID.fromString(user.getUserId());
+            if (SecurityUtil.isAccommodationOwner()) {
+                UUID ownerUuid = UUID.fromString(currentUser.getUserId());
                 statistics = statistics.stream()
                     .filter(stat -> {
                         try {

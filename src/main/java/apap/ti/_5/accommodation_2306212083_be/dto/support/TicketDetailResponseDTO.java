@@ -1,55 +1,38 @@
 package apap.ti._5.accommodation_2306212083_be.dto.support;
 
+import apap.ti._5.accommodation_2306212083_be.enums.ServiceSource;
+import apap.ti._5.accommodation_2306212083_be.enums.TicketStatus;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 /**
- * DTO for detailed support ticket responses including messages and progress.
+ * Response DTO for detailed ticket view (includes messages, progress, and external booking data)
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@EqualsAndHashCode(callSuper = true)
-public class TicketDetailResponseDTO extends TicketResponseDTO {
-
-    /**
-     * List of messages in this ticket
-     */
+public class TicketDetailResponseDTO {
+    
+    private UUID id;
+    private UUID userId;
+    private String subject;
+    private TicketStatus status;
+    private ServiceSource serviceSource;
+    private String externalBookingId;
+    private String initialMessage;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
+    
+    // Related data
     private List<MessageResponseDTO> messages;
-
-    /**
-     * List of progress updates in this ticket
-     */
-    private List<ProgressResponseDTO> progress;
-
-    @Builder(builderMethodName = "detailBuilder")
-    public TicketDetailResponseDTO(
-            String ticketId,
-            String userId,
-            String assignedAdminId,
-            apap.ti._5.accommodation_2306212083_be.enums.ServiceSource externalServiceSource,
-            String externalBookingId,
-            String subject,
-            String description,
-            apap.ti._5.accommodation_2306212083_be.enums.TicketStatus status,
-            apap.ti._5.accommodation_2306212083_be.enums.Priority priority,
-            apap.ti._5.accommodation_2306212083_be.enums.Category category,
-            java.time.LocalDateTime createdAt,
-            java.time.LocalDateTime updatedAt,
-            java.time.LocalDateTime closedAt,
-            BookingInfoDTO bookingInfo,
-            Integer unreadMessageCount,
-            List<MessageResponseDTO> messages,
-            List<ProgressResponseDTO> progress) {
-        super(ticketId, userId, assignedAdminId, externalServiceSource, externalBookingId,
-                subject, description, status, priority, category, createdAt, updatedAt,
-                closedAt, bookingInfo, unreadMessageCount);
-        this.messages = messages;
-        this.progress = progress;
-    }
+    private List<ProgressResponseDTO> progressEntries;
+    
+    // External booking data (dynamic based on service source)
+    private Object externalBookingData;
+    private Boolean externalBookingDataAvailable;
 }

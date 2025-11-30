@@ -25,23 +25,44 @@ public class AuthProxyController {
     private final ProfileClient profileClient;
 
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest loginRequest, HttpServletResponse response) {
+    public ResponseEntity<Map<String, Object>> login(@RequestBody LoginRequest loginRequest, HttpServletResponse response) {
         logger.info("Login attempt for user: {}", loginRequest.getEmail());
         
-        LoginResponse loginResponse = profileClient.login(loginRequest);
-        
-        if (loginResponse != null && loginResponse.getToken() != null) {
-            logger.info("Login successful for user: {}", loginRequest.getEmail());
-            Cookie jwtCookie = new Cookie("JWT_TOKEN", loginResponse.getToken());
-            jwtCookie.setHttpOnly(true);
-            jwtCookie.setPath("/");
-            jwtCookie.setMaxAge(7 * 24 * 60 * 60); // 7 days
-            response.addCookie(jwtCookie);
-            return ResponseEntity.ok(loginResponse);
+        try {
+            LoginResponse loginResponse = profileClient.login(loginRequest);
+            
+            if (loginResponse != null && loginResponse.getToken() != null) {
+                logger.info("Login successful for user: {}. Role: {}", loginRequest.getEmail(), loginResponse.getRole());
+                
+                // Set JWT cookie
+                Cookie jwtCookie = new Cookie("JWT_TOKEN", loginResponse.getToken());
+                jwtCookie.setHttpOnly(true);
+                jwtCookie.setPath("/");
+                jwtCookie.setMaxAge(7 * 24 * 60 * 60); // 7 days
+                response.addCookie(jwtCookie);
+                
+                // Return response in expected format for frontend
+                Map<String, Object> responseBody = new HashMap<>();
+                responseBody.put("success", true);
+                responseBody.put("message", "Login successful");
+                responseBody.put("data", loginResponse);
+                
+                return ResponseEntity.ok(responseBody);
+            }
+            
+            logger.warn("Login failed for user: {} - Invalid credentials or Profile Service unavailable", loginRequest.getEmail());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", "Invalid email or password");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
+            
+        } catch (Exception e) {
+            logger.error("Error during login for user: {}", loginRequest.getEmail(), e);
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", "An error occurred during login. Please try again.");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
-        
-        logger.warn("Login failed for user: {} - Invalid credentials or Profile Service unavailable", loginRequest.getEmail());
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
     }
 
     @PostMapping("/register")

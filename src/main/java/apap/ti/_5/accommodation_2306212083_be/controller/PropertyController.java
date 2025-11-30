@@ -2,15 +2,16 @@ package apap.ti._5.accommodation_2306212083_be.controller;
 
 import apap.ti._5.accommodation_2306212083_be.model.Property;
 import apap.ti._5.accommodation_2306212083_be.model.RoomType;
-import apap.ti._5.accommodation_2306212083_be.security.annotations.IsOwner;
-import apap.ti._5.accommodation_2306212083_be.security.annotations.IsSuperadmin;
-import apap.ti._5.accommodation_2306212083_be.service.OwnerValidationService;
 import apap.ti._5.accommodation_2306212083_be.service.PropertyService;
 import apap.ti._5.accommodation_2306212083_be.service.RoomService;
 import apap.ti._5.accommodation_2306212083_be.repository.RoomTypeRepository;
+import apap.ti._5.accommodation_2306212083_be.util.PropertyRoomTypeValidator;
+import apap.ti._5.accommodation_2306212083_be.util.SecurityUtil;
+import apap.ti._5.accommodation_2306212083_be.dto.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -23,10 +24,10 @@ public class PropertyController {
     private final PropertyService propertyService;
     private final RoomService roomService;
     private final RoomTypeRepository roomTypeRepository;
-    private final OwnerValidationService ownerValidationService;
+    private final PropertyRoomTypeValidator roomTypeValidator;
 
     /**
-     * GET /api/property - List all properties
+     * GET /api/property - List all properties (filtered by owner for Accommodation Owner)
      */
     @GetMapping
     public ResponseEntity<Map<String, Object>> listProperties(
@@ -34,11 +35,29 @@ public class PropertyController {
             @RequestParam(required = false) Integer type,
             @RequestParam(required = false) Integer province) {
         
+        UserPrincipal currentUser = SecurityUtil.getCurrentUser();
         List<Property> properties;
-        if (name != null || type != null || province != null) {
-            properties = propertyService.searchProperties(name, type, province);
+        
+        // Filter by owner for Accommodation Owner role
+        if ("Accommodation Owner".equals(currentUser.getRole())) {
+            UUID ownerId = UUID.fromString(currentUser.getUserId());
+            properties = propertyService.getPropertiesByOwner(ownerId);
+            
+            // Apply additional filters if provided
+            if (name != null || type != null || province != null) {
+                properties = properties.stream()
+                    .filter(p -> (name == null || p.getPropertyName().toLowerCase().contains(name.toLowerCase())))
+                    .filter(p -> (type == null || p.getType().equals(type)))
+                    .filter(p -> (province == null || p.getProvince().equals(province)))
+                    .toList();
+            }
         } else {
-            properties = propertyService.getAllActiveProperties();
+            // Superadmin and Customer can see all properties
+            if (name != null || type != null || province != null) {
+                properties = propertyService.searchProperties(name, type, province);
+            } else {
+                properties = propertyService.getAllActiveProperties();
+            }
         }
         
         // Add room count to each property
@@ -82,6 +101,26 @@ public class PropertyController {
     @GetMapping("/{id}/room-types")
     public ResponseEntity<Map<String, Object>> getRoomTypesByProperty(@PathVariable String id) {
         try {
+            // Validate ownership for Accommodation Owner
+            UserPrincipal currentUser = SecurityUtil.getCurrentUser();
+            if ("Accommodation Owner".equals(currentUser.getRole())) {
+                Optional<Property> property = propertyService.getPropertyById(id);
+                if (property.isEmpty()) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "Property not found");
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+                }
+                
+                UUID currentUserId = UUID.fromString(currentUser.getUserId());
+                if (!property.get().getOwnerId().equals(currentUserId)) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("success", false);
+                    response.put("message", "Access denied: You don't own this property");
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+                }
+            }
+            
             List<RoomType> roomTypes = roomTypeRepository.findByProperty_PropertyIdAndActiveStatus(id, 1);
             
             Map<String, Object> response = new HashMap<>();
@@ -108,6 +147,18 @@ public class PropertyController {
         Property property = propertyService.getPropertyById(id)
             .orElseThrow(() -> new RuntimeException("Property not found"));
         
+        // Validate ownership for Accommodation Owner
+        UserPrincipal currentUser = SecurityUtil.getCurrentUser();
+        if ("Accommodation Owner".equals(currentUser.getRole())) {
+            UUID currentUserId = UUID.fromString(currentUser.getUserId());
+            if (!property.getOwnerId().equals(currentUserId)) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "Access denied: You don't own this property");
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+            }
+        }
+        
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);
         response.put("property", property);
@@ -128,7 +179,7 @@ public class PropertyController {
      * Requires: ACCOMMODATION_OWNER or SUPERADMIN role
      */
     @PostMapping("/create")
-    @IsOwner
+    @PreAuthorize("hasAnyAuthority('Superadmin', 'Accommodation Owner')")
     @SuppressWarnings("unchecked")
     public ResponseEntity<Map<String, Object>> createProperty(@RequestBody Map<String, Object> request) {
         try {
@@ -139,10 +190,24 @@ public class PropertyController {
             property.setAddress((String) request.get("address"));
             property.setProvince(((Number) request.get("province")).intValue());
             property.setDescription((String) request.get("description"));
-            property.setOwnerName((String) request.get("ownerName"));
             
-            // Auto-set ownerId from authenticated user using OwnerValidationService
-            ownerValidationService.setOwnerForNewProperty(property);
+            // Auto-set owner information from authenticated user
+            UserPrincipal currentUser = SecurityUtil.getCurrentUser();
+            if (currentUser == null) {
+                throw new RuntimeException("User not authenticated");
+            }
+            
+            // Superadmin can assign property to specific owner if ownerId provided
+            if (SecurityUtil.isSuperadmin() && request.containsKey("ownerId")) {
+                String ownerIdStr = (String) request.get("ownerId");
+                property.setOwnerId(UUID.fromString(ownerIdStr));
+                // For superadmin assigning to another user, still need ownerName from request
+                property.setOwnerName((String) request.get("ownerName"));
+            } else {
+                // For Accommodation Owner, auto-set their own ID and name
+                property.setOwnerId(UUID.fromString(currentUser.getUserId()));
+                property.setOwnerName(currentUser.getName());
+            }
             
             // Extract room types if provided
             List<RoomType> roomTypes = new ArrayList<>();
@@ -189,14 +254,19 @@ public class PropertyController {
      * Requires: ACCOMMODATION_OWNER (own property) or SUPERADMIN
      */
     @GetMapping("/update/{id}")
-    @IsOwner
+    @PreAuthorize("hasAnyAuthority('Superadmin', 'Accommodation Owner')")
     public ResponseEntity<Map<String, Object>> getPropertyForUpdate(@PathVariable String id) {
         try {
-            // Validate ownership
-            ownerValidationService.validateOwnership(id);
-            
+            // Validate ownership - Superadmin can access all, Owner only their own
             Property property = propertyService.getPropertyById(id)
                 .orElseThrow(() -> new RuntimeException("Property not found"));
+            
+            if (!SecurityUtil.isSuperadmin()) {
+                UserPrincipal currentUser = SecurityUtil.getCurrentUser();
+                if (!property.getOwnerId().toString().equals(currentUser.getUserId())) {
+                    throw new RuntimeException("Access denied: You can only update your own properties");
+                }
+            }
             
             List<RoomType> roomTypes = roomService.getRoomTypesByProperty(id);
             
@@ -219,19 +289,24 @@ public class PropertyController {
      * Requires: ACCOMMODATION_OWNER (own property) or SUPERADMIN
      */
     @PutMapping("/update")
-    @IsOwner
+    @PreAuthorize("hasAnyAuthority('Superadmin', 'Accommodation Owner')")
     @SuppressWarnings("unchecked")
     public ResponseEntity<Map<String, Object>> updateProperty(@RequestBody Map<String, Object> request) {
         try {
             // Extract property ID
             String propertyId = (String) request.get("propertyId");
             
-            // Validate ownership
-            ownerValidationService.validateOwnership(propertyId);
-            
             // Get existing property
             Property existingProperty = propertyService.getPropertyById(propertyId)
                 .orElseThrow(() -> new RuntimeException("Property not found"));
+            
+            // Validate ownership - Superadmin can update all, Owner only their own
+            if (!SecurityUtil.isSuperadmin()) {
+                UserPrincipal currentUser = SecurityUtil.getCurrentUser();
+                if (!existingProperty.getOwnerId().toString().equals(currentUser.getUserId())) {
+                    throw new RuntimeException("Access denied: You can only update your own properties");
+                }
+            }
             
             // Update property fields
             existingProperty.setPropertyName((String) request.get("propertyName"));
@@ -309,7 +384,7 @@ public class PropertyController {
      * Requires: SUPERADMIN role only
      */
     @DeleteMapping("/delete/{id}")
-    @IsSuperadmin
+    @PreAuthorize("hasAuthority('Superadmin')")
     public ResponseEntity<Map<String, Object>> deleteProperty(@PathVariable String id) {
         try {
             propertyService.softDeleteProperty(id);
@@ -332,34 +407,47 @@ public class PropertyController {
      * Requires: ACCOMMODATION_OWNER (own property) or SUPERADMIN
      */
     @PostMapping("/updateroom")
-    @IsOwner
+    @PreAuthorize("hasAnyAuthority('Superadmin', 'Accommodation Owner')")
     @SuppressWarnings("unchecked")
     public ResponseEntity<Map<String, Object>> addRoomTypes(@RequestBody Map<String, Object> request) {
         try {
             String propertyId = (String) request.get("propertyId");
             
-            // Validate ownership
-            ownerValidationService.validateOwnership(propertyId);
-            
             // Get existing property
-            Property property = propertyService.getPropertyById(propertyId)
+            Property existingProperty = propertyService.getPropertyById(propertyId)
                 .orElseThrow(() -> new RuntimeException("Property not found"));
+            
+            // Validate ownership - Superadmin can update all, Owner only their own
+            if (!SecurityUtil.isSuperadmin()) {
+                UserPrincipal currentUser = SecurityUtil.getCurrentUser();
+                if (!existingProperty.getOwnerId().toString().equals(currentUser.getUserId())) {
+                    throw new RuntimeException("Access denied: You can only update your own properties");
+                }
+            }
             
             // Extract new room types
             List<RoomType> newRoomTypes = new ArrayList<>();
             List<List<Integer>> roomCounts = new ArrayList<>();
+            List<String> invalidRoomTypes = new ArrayList<>();
             
             if (request.containsKey("roomTypes") && request.get("roomTypes") != null) {
                 List<Map<String, Object>> roomTypesData = (List<Map<String, Object>>) request.get("roomTypes");
                 for (Map<String, Object> rtData : roomTypesData) {
+                    String roomTypeName = (String) rtData.get("name");
+                    
+                    // Validate room type against property type
+                    if (!roomTypeValidator.isValidRoomType(existingProperty.getType(), roomTypeName)) {
+                        invalidRoomTypes.add(roomTypeName);
+                    }
+                    
                     RoomType rt = new RoomType();
-                    rt.setName((String) rtData.get("name"));
+                    rt.setName(roomTypeName);
                     rt.setPrice((Integer) rtData.get("price"));
                     rt.setCapacity((Integer) rtData.get("capacity"));
                     rt.setFacility((String) rtData.get("facility"));
                     rt.setFloor((Integer) rtData.get("floor"));
                     rt.setDescription((String) rtData.get("description"));
-                    rt.setProperty(property);
+                    rt.setProperty(existingProperty);
                     newRoomTypes.add(rt);
                     
                     // Get room count for this room type
@@ -368,10 +456,23 @@ public class PropertyController {
                 }
             }
             
+            // If there are invalid room types, return error
+            if (!invalidRoomTypes.isEmpty()) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("success", false);
+                errorResponse.put("message", "Invalid room types for property type " + 
+                    roomTypeValidator.getPropertyTypeString(existingProperty.getType()));
+                errorResponse.put("invalidRoomTypes", invalidRoomTypes);
+                errorResponse.put("validRoomTypes", roomTypeValidator.getValidRoomTypes(existingProperty.getType()));
+                errorResponse.put("propertyType", existingProperty.getType());
+                errorResponse.put("propertyTypeString", roomTypeValidator.getPropertyTypeString(existingProperty.getType()));
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+            }
+            
             // Add room types using service
             for (int i = 0; i < newRoomTypes.size(); i++) {
                 RoomType rt = newRoomTypes.get(i);
-                roomService.addRoomType(property, rt, roomCounts.get(i).get(0));
+                roomService.addRoomType(existingProperty, rt, roomCounts.get(i).get(0));
             }
             
             Map<String, Object> response = new HashMap<>();
@@ -385,6 +486,35 @@ public class PropertyController {
             response.put("success", false);
             response.put("message", e.getMessage());
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+    }
+
+    /**
+     * GET /api/property/{propertyId}/valid-room-types - Get valid room types for property
+     * Returns the list of valid room types based on the property's type
+     */
+    @GetMapping("/{propertyId}/valid-room-types")
+    public ResponseEntity<Map<String, Object>> getValidRoomTypes(@PathVariable String propertyId) {
+        try {
+            Property property = propertyService.getPropertyById(propertyId)
+                .orElseThrow(() -> new RuntimeException("Property not found"));
+            
+            Set<String> validRoomTypes = roomTypeValidator.getValidRoomTypes(property.getType());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("propertyId", property.getPropertyId());
+            response.put("propertyName", property.getPropertyName());
+            response.put("propertyType", property.getType());
+            response.put("propertyTypeString", roomTypeValidator.getPropertyTypeString(property.getType()));
+            response.put("validRoomTypes", validRoomTypes);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
         }
     }
 }
