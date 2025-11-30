@@ -24,7 +24,7 @@ docker-build-push:
         sudo docker push $DOCKER_IMAGE_NAME:$IMAGE_TAG
       "
   only:
-    - feat/deploy
+    - feat/profile
 
 deploy:
   stage: deploy
@@ -48,4 +48,4 @@ deploy:
         sudo k3s kubectl rollout status deployment/accommodation-fe
       "
   only:
-    - feat/deploy
+    - feat/profile
