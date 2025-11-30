@@ -6,11 +6,10 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
-
 /**
  * DTO for Tour Package from external service
- * Endpoint: GET https://2306219575-be.hafizmuh.site/api/packages
+ * Endpoint: GET https://2306219575-be.hafizmuh.site/api/package
+ * Response format: { status: 200, message: "...", timestamp: "...", data: [...] }
  */
 @Data
 @NoArgsConstructor
@@ -33,11 +32,14 @@ public class TourPackageDTO {
     @JsonProperty("price")
     private Long price;
     
+    @JsonProperty("totalPrice")
+    private Long totalPrice;
+    
     @JsonProperty("startDate")
-    private LocalDateTime startDate;
+    private String startDate;
     
     @JsonProperty("endDate")
-    private LocalDateTime endDate;
+    private String endDate;
     
     @JsonProperty("status")
     private String status;

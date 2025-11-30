@@ -5,13 +5,18 @@ import apap.ti._5.accommodation_2306212083_be.enums.ServiceSource;
 import apap.ti._5.accommodation_2306212083_be.exception.ExternalServiceException;
 import apap.ti._5.accommodation_2306212083_be.model.AccommodationBooking;
 import apap.ti._5.accommodation_2306212083_be.repository.AccommodationBookingRepository;
+import apap.ti._5.accommodation_2306212083_be.util.SecurityUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -30,6 +35,21 @@ public class ExternalBookingService {
                                    AccommodationBookingRepository accommodationBookingRepository) {
         this.restTemplate = restTemplate;
         this.accommodationBookingRepository = accommodationBookingRepository;
+    }
+    
+    /**
+     * Create HTTP headers with Bearer authentication token
+     */
+    private HttpHeaders createAuthHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        String token = SecurityUtil.getCurrentToken();
+        if (token != null) {
+            headers.set("Authorization", "Bearer " + token);
+            log.debug("Added auth token to request headers");
+        } else {
+            log.warn("No auth token available in security context");
+        }
+        return headers;
     }
     
     /**
@@ -178,10 +198,13 @@ public class ExternalBookingService {
     
     private List<InsurancePolicyDTO> fetchInsurancePolicies(String baseUrl, UUID userId) {
         try {
+            HttpHeaders headers = createAuthHeaders();
+            HttpEntity<String> entity = new HttpEntity<>(headers);
+            
             ResponseEntity<List<InsurancePolicyDTO>> response = restTemplate.exchange(
                 baseUrl,
                 HttpMethod.GET,
-                null,
+                entity,
                 new ParameterizedTypeReference<List<InsurancePolicyDTO>>() {}
             );
             
@@ -194,19 +217,22 @@ public class ExternalBookingService {
             //         .toList();
             // }
             
-            return policies;
+            return policies != null ? policies : Collections.emptyList();
         } catch (Exception e) {
             log.error("Error fetching insurance policies: {}", e.getMessage());
-            throw new ExternalServiceException("Failed to fetch insurance policies", e);
+            return Collections.emptyList();
         }
     }
     
     private InsurancePolicyDTO fetchInsurancePolicyById(String baseUrl, String policyId) {
         try {
+            HttpHeaders headers = createAuthHeaders();
+            HttpEntity<String> entity = new HttpEntity<>(headers);
+            
             ResponseEntity<List<InsurancePolicyDTO>> response = restTemplate.exchange(
                 baseUrl,
                 HttpMethod.GET,
-                null,
+                entity,
                 new ParameterizedTypeReference<List<InsurancePolicyDTO>>() {}
             );
             
@@ -226,10 +252,13 @@ public class ExternalBookingService {
     
     private List<FlightBookingDTO> fetchFlightBookings(String baseUrl, UUID userId) {
         try {
+            HttpHeaders headers = createAuthHeaders();
+            HttpEntity<String> entity = new HttpEntity<>(headers);
+            
             ResponseEntity<List<FlightBookingDTO>> response = restTemplate.exchange(
                 baseUrl,
                 HttpMethod.GET,
-                null,
+                entity,
                 new ParameterizedTypeReference<List<FlightBookingDTO>>() {}
             );
             
@@ -242,19 +271,22 @@ public class ExternalBookingService {
             //         .toList();
             // }
             
-            return bookings;
+            return bookings != null ? bookings : Collections.emptyList();
         } catch (Exception e) {
             log.error("Error fetching flight bookings: {}", e.getMessage());
-            throw new ExternalServiceException("Failed to fetch flight bookings", e);
+            return Collections.emptyList();
         }
     }
     
     private FlightBookingDTO fetchFlightBookingById(String baseUrl, String bookingId) {
         try {
+            HttpHeaders headers = createAuthHeaders();
+            HttpEntity<String> entity = new HttpEntity<>(headers);
+            
             ResponseEntity<List<FlightBookingDTO>> response = restTemplate.exchange(
                 baseUrl,
                 HttpMethod.GET,
-                null,
+                entity,
                 new ParameterizedTypeReference<List<FlightBookingDTO>>() {}
             );
             
@@ -274,10 +306,13 @@ public class ExternalBookingService {
     
     private List<RentalVehicleDTO> fetchRentalVehicles(String baseUrl, UUID userId) {
         try {
+            HttpHeaders headers = createAuthHeaders();
+            HttpEntity<String> entity = new HttpEntity<>(headers);
+            
             ResponseEntity<List<RentalVehicleDTO>> response = restTemplate.exchange(
                 baseUrl,
                 HttpMethod.GET,
-                null,
+                entity,
                 new ParameterizedTypeReference<List<RentalVehicleDTO>>() {}
             );
             
@@ -290,19 +325,22 @@ public class ExternalBookingService {
             //         .toList();
             // }
             
-            return vehicles;
+            return vehicles != null ? vehicles : Collections.emptyList();
         } catch (Exception e) {
             log.error("Error fetching rental vehicles: {}", e.getMessage());
-            throw new ExternalServiceException("Failed to fetch rental vehicles", e);
+            return Collections.emptyList();
         }
     }
     
     private RentalVehicleDTO fetchRentalVehicleById(String baseUrl, String vehicleId) {
         try {
+            HttpHeaders headers = createAuthHeaders();
+            HttpEntity<String> entity = new HttpEntity<>(headers);
+            
             ResponseEntity<List<RentalVehicleDTO>> response = restTemplate.exchange(
                 baseUrl,
                 HttpMethod.GET,
-                null,
+                entity,
                 new ParameterizedTypeReference<List<RentalVehicleDTO>>() {}
             );
             
@@ -322,41 +360,47 @@ public class ExternalBookingService {
     
     private List<TourPackageDTO> fetchTourPackages(String baseUrl, UUID userId) {
         try {
-            ResponseEntity<List<TourPackageDTO>> response = restTemplate.exchange(
+            HttpHeaders headers = createAuthHeaders();
+            HttpEntity<String> entity = new HttpEntity<>(headers);
+            
+            log.info("Fetching tour packages from: {}", baseUrl);
+            
+            // Tour Package API returns: { status: 200, message: "...", timestamp: "...", data: [...] }
+            ResponseEntity<TourPackageApiResponse> response = restTemplate.exchange(
                 baseUrl,
                 HttpMethod.GET,
-                null,
-                new ParameterizedTypeReference<List<TourPackageDTO>>() {}
+                entity,
+                TourPackageApiResponse.class
             );
             
-            List<TourPackageDTO> packages = response.getBody();
+            TourPackageApiResponse apiResponse = response.getBody();
+            if (apiResponse != null && apiResponse.getData() != null) {
+                log.info("Received {} tour packages", apiResponse.getData().size());
+                return apiResponse.getData();
+            }
             
-            // Filter by userId - DISABLED for debug
-            // if (packages != null && userId != null) {
-            //     return packages.stream()
-            //         .filter(p -> p.getUserId() != null && p.getUserId().equals(userId.toString()))
-            //         .toList();
-            // }
-            
-            return packages;
+            return Collections.emptyList();
         } catch (Exception e) {
             log.error("Error fetching tour packages: {}", e.getMessage());
-            throw new ExternalServiceException("Failed to fetch tour packages", e);
+            return Collections.emptyList();
         }
     }
     
     private TourPackageDTO fetchTourPackageById(String baseUrl, String packageId) {
         try {
-            ResponseEntity<List<TourPackageDTO>> response = restTemplate.exchange(
+            HttpHeaders headers = createAuthHeaders();
+            HttpEntity<String> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<TourPackageApiResponse> response = restTemplate.exchange(
                 baseUrl,
                 HttpMethod.GET,
-                null,
-                new ParameterizedTypeReference<List<TourPackageDTO>>() {}
+                entity,
+                TourPackageApiResponse.class
             );
             
-            List<TourPackageDTO> packages = response.getBody();
-            if (packages != null) {
-                return packages.stream()
+            TourPackageApiResponse apiResponse = response.getBody();
+            if (apiResponse != null && apiResponse.getData() != null) {
+                return apiResponse.getData().stream()
                     .filter(p -> p.getId().equals(packageId))
                     .findFirst()
                     .orElse(null);

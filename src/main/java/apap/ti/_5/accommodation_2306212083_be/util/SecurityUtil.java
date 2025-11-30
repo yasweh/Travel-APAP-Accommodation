@@ -62,4 +62,16 @@ public class SecurityUtil {
         String role = getCurrentUserRole();
         return "Customer".equals(role);
     }
+
+    /**
+     * Get the JWT token from the current authentication context
+     * @return JWT token string or null if not available
+     */
+    public static String getCurrentToken() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getCredentials() instanceof String) {
+            return (String) authentication.getCredentials();
+        }
+        return null;
+    }
 }

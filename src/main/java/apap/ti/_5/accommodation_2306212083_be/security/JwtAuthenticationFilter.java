@@ -57,9 +57,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                             .role(mappedRole)
                             .build();
 
-                    // Create authentication token
+                    // Create authentication token with JWT token as credentials
                     UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                            userPrincipal, null, userPrincipal.getAuthorities());
+                            userPrincipal, token, userPrincipal.getAuthorities());
                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
                     // Set authentication in SecurityContext

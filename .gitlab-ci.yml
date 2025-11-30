@@ -22,7 +22,7 @@ build:
       - k8s/service.yaml
     expire_in: 1 hour
   only:
-    - feat/deploy
+    - feat/profile
 
 docker-push:
   stage: docker-push
@@ -38,7 +38,7 @@ docker-push:
     - docker build -t $DOCKER_IMAGE_NAME:$IMAGE_TAG .
     - docker push $DOCKER_IMAGE_NAME:$IMAGE_TAG
   only:
-    - feat/deploy
+    - feat/profile
 
 deploy:
   stage: deploy
@@ -67,4 +67,4 @@ deploy:
         sudo k3s kubectl rollout status deployment/accommodation-be -n default
       "
   only:
-    - feat/deploy
+    - feat/profile
