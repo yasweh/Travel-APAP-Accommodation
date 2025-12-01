@@ -17,10 +17,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -288,24 +288,23 @@ public class BookingServiceImpl implements BookingService {
         roomRepository.save(room);
         
         // Create bill in external Bill service
+        // Payload: customerId, serviceName="Accommodation", serviceReferenceId=bookingId, 
+        //          description="Accommodation Bill", amount=totalPrice
         try {
-            String propertyName = roomType.getProperty().getPropertyName();
-            String roomTypeName = roomType.getName();
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-            
-            billService.createBillForBooking(
-                request.getCustomerId().toString(),
-                saved.getBookingId(),
-                propertyName,
-                roomTypeName,
-                checkInDate.format(formatter),
-                checkOutDate.format(formatter),
-                totalPrice
+            log.info("Creating bill for booking {} with totalPrice {}", saved.getBookingId(), totalPrice);
+            var billResult = billService.createBillForBooking(
+                request.getCustomerId().toString(),  // customerId
+                saved.getBookingId(),                 // serviceReferenceId (booking ID)
+                totalPrice                            // amount (from booking calculation)
             );
-            log.info("Bill created successfully for booking {}", saved.getBookingId());
+            if (billResult != null) {
+                log.info("✅ Bill created successfully for booking {}", saved.getBookingId());
+            } else {
+                log.warn("⚠️ Bill creation returned null for booking {}", saved.getBookingId());
+            }
         } catch (Exception e) {
             // Log but don't fail the booking creation
-            log.error("Failed to create bill for booking {}: {}", saved.getBookingId(), e.getMessage());
+            log.error("❌ Failed to create bill for booking {}: {}", saved.getBookingId(), e.getMessage());
         }
         
         return mapToResponseDTO(saved);
@@ -388,7 +387,12 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     public List<BookingResponseDTO> getAllBookingsAsDTO() {
+        // First sync payment status with Bill Service
+        syncPaymentStatusWithBillService();
+        
+        // Then get all bookings
         List<AccommodationBooking> bookings = getAllBookings();
+        
         return bookings.stream()
             .map(this::mapToResponseDTO)
             .collect(Collectors.toList());
@@ -423,6 +427,54 @@ public class BookingServiceImpl implements BookingService {
         booking.setStatus(2);
         booking.setUpdatedDate(LocalDateTime.now());
         bookingRepository.save(booking);
+    }
+
+    @Override
+    public void syncPaymentStatusWithBillService() {
+        log.info("========== SYNCING PAYMENT STATUS WITH BILL SERVICE ==========");
+        
+        try {
+            Set<String> paidBookingIds = billService.getPaidAccommodationBookingIds();
+            
+            if (paidBookingIds.isEmpty()) {
+                log.info("No PAID Accommodation bookings found in Bill Service");
+                return;
+            }
+            
+            log.info("Found {} PAID bookings in Bill Service: {}", paidBookingIds.size(), paidBookingIds);
+            
+            // Get all bookings with status 0 (Waiting for Payment)
+            List<AccommodationBooking> waitingBookings = getBookingsByStatus(0);
+            log.info("Found {} bookings with Waiting status in our database", waitingBookings.size());
+            
+            int updatedCount = 0;
+            for (AccommodationBooking booking : waitingBookings) {
+                if (paidBookingIds.contains(booking.getBookingId())) {
+                    log.info(">>> Updating booking {} from Waiting (0) to Confirmed (1)", booking.getBookingId());
+                    payBookingById(booking.getBookingId());
+                    updatedCount++;
+                }
+            }
+            
+            log.info("Updated {} bookings to Payment Confirmed", updatedCount);
+            log.info("================================================================");
+            
+        } catch (Exception e) {
+            log.error("Error syncing with Bill Service: {} - {}", e.getClass().getSimpleName(), e.getMessage());
+        }
+    }
+
+    @Override
+    public List<BookingResponseDTO> getBookingsByCustomerAsDTO(UUID customerId) {
+        // First sync payment status with Bill Service
+        syncPaymentStatusWithBillService();
+        
+        // Then get customer bookings
+        List<AccommodationBooking> bookings = getBookingsByCustomer(customerId);
+        
+        return bookings.stream()
+            .map(this::mapToResponseDTO)
+            .collect(Collectors.toList());
     }
 
     @Override

@@ -2,6 +2,8 @@ package apap.ti._5.accommodation_2306212083_be.service;
 
 import apap.ti._5.accommodation_2306212083_be.dto.external.BillRequestDTO;
 import apap.ti._5.accommodation_2306212083_be.dto.external.BillResponseDTO;
+import apap.ti._5.accommodation_2306212083_be.dto.external.CustomerBillDTO;
+import apap.ti._5.accommodation_2306212083_be.dto.external.CustomerBillsResponseDTO;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,12 +14,21 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Service for interacting with external Bill service
  * Bill service URL: http://2306211660-be.hafizmuh.site/api/bill
+ * 
+ * Payload yang dikirim:
+ * - customerId: UUID customer
+ * - serviceName: "Accommodation" (capitalized)
+ * - serviceReferenceId: booking ID
+ * - description: "Accommodation Bill" (hardcoded)
+ * - amount: total price dari booking
  */
 @Service
 @Slf4j
@@ -25,6 +36,11 @@ public class BillService {
 
     private static final String BILL_SERVICE_BASE_URL = "http://2306211660-be.hafizmuh.site/api/bill";
     private static final String CREATE_BILL_URL = BILL_SERVICE_BASE_URL + "/create";
+    private static final String GET_CUSTOMER_BILLS_URL = BILL_SERVICE_BASE_URL + "/customer";
+    
+    // Hardcoded values
+    private static final String SERVICE_NAME = "Accommodation";
+    private static final String DESCRIPTION = "Accommodation Bill";
 
     private final RestTemplate restTemplate;
 
@@ -44,7 +60,7 @@ public class BillService {
                 String authHeader = request.getHeader("Authorization");
                 if (authHeader != null && authHeader.startsWith("Bearer ")) {
                     String token = authHeader.substring(7);
-                    log.debug("Got JWT token from HTTP request header for Bill service");
+                    log.info("Got JWT token from HTTP request header for Bill service");
                     return token;
                 }
             }
@@ -55,7 +71,7 @@ public class BillService {
         // Fallback to Security Context
         String token = apap.ti._5.accommodation_2306212083_be.util.SecurityUtil.getCurrentToken();
         if (token != null && !token.isEmpty()) {
-            log.debug("Got JWT token from Security Context for Bill service");
+            log.info("Got JWT token from Security Context for Bill service");
             return token;
         }
         
@@ -74,9 +90,9 @@ public class BillService {
         String token = getTokenFromRequest();
         if (token != null && !token.isEmpty()) {
             headers.setBearerAuth(token);
-            log.info("Bearer token added to Bill service request");
+            log.debug("Bearer token added to Bill service request");
         } else {
-            log.warn("No JWT token found - Bill service call may fail authentication");
+            log.error("No JWT token found - Bill service call will fail authentication!");
         }
         
         return headers;
@@ -88,25 +104,33 @@ public class BillService {
      * 
      * @param customerId Customer UUID
      * @param bookingId Booking ID (service reference)
-     * @param description Description of the booking
-     * @param amount Total price
+     * @param amount Total price from booking
      * @return BillResponseDTO if successful, null if failed
      */
-    public BillResponseDTO createBill(String customerId, String bookingId, String description, BigDecimal amount) {
-        log.info("Creating bill for booking {} with amount {}", bookingId, amount);
+    public BillResponseDTO createBill(String customerId, String bookingId, BigDecimal amount) {
+        log.info("========== CREATING BILL ==========");
+        log.info("Target URL: {}", CREATE_BILL_URL);
+        log.info("Customer ID: {}", customerId);
+        log.info("Booking ID (serviceReferenceId): {}", bookingId);
+        log.info("Service Name: {}", SERVICE_NAME);
+        log.info("Description: {}", DESCRIPTION);
+        log.info("Amount: {}", amount);
+        log.info("====================================");
         
         try {
             BillRequestDTO request = BillRequestDTO.builder()
                 .customerId(customerId)
-                .serviceName("accommodation")
+                .serviceName(SERVICE_NAME)
                 .serviceReferenceId(bookingId)
-                .description(description)
+                .description(DESCRIPTION)
                 .amount(amount)
                 .build();
             
-            HttpEntity<BillRequestDTO> entity = new HttpEntity<>(request, createAuthHeaders());
+            HttpHeaders headers = createAuthHeaders();
+            HttpEntity<BillRequestDTO> entity = new HttpEntity<>(request, headers);
             
-            log.info("Sending POST to {} with payload: {}", CREATE_BILL_URL, request);
+            log.info("Sending POST to Bill Service: {}", CREATE_BILL_URL);
+            log.info("Request Body: {}", request);
             
             ResponseEntity<BillResponseDTO> response = restTemplate.exchange(
                 CREATE_BILL_URL,
@@ -115,50 +139,87 @@ public class BillService {
                 BillResponseDTO.class
             );
             
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                log.info("Bill created successfully: {}", response.getBody());
+            if (response.getStatusCode().is2xxSuccessful()) {
+                log.info("✅ Bill created successfully!");
+                log.info("Response Status: {}", response.getStatusCode());
+                log.info("Response Body: {}", response.getBody());
                 return response.getBody();
             } else {
-                log.error("Bill creation failed with status: {}", response.getStatusCode());
+                log.error("❌ Bill creation failed with status: {}", response.getStatusCode());
+                log.error("Response Body: {}", response.getBody());
                 return null;
             }
         } catch (Exception e) {
-            log.error("Error creating bill for booking {}: {} - {}", 
-                bookingId, e.getClass().getSimpleName(), e.getMessage());
-            // Don't throw - booking creation should still succeed even if bill creation fails
+            log.error("❌ Error creating bill for booking {}", bookingId);
+            log.error("Exception Type: {}", e.getClass().getSimpleName());
+            log.error("Exception Message: {}", e.getMessage());
             return null;
         }
     }
 
     /**
-     * Create a bill with full booking details
+     * Create a bill for a booking
      * 
      * @param customerId Customer UUID as string
      * @param bookingId Booking ID
-     * @param propertyName Property name for description
-     * @param roomTypeName Room type name for description
-     * @param checkInDate Check-in date
-     * @param checkOutDate Check-out date
-     * @param totalPrice Total booking price
+     * @param totalPrice Total booking price (MUST be accurate from booking)
      * @return BillResponseDTO if successful, null if failed
      */
-    public BillResponseDTO createBillForBooking(
-            String customerId,
-            String bookingId,
-            String propertyName,
-            String roomTypeName,
-            String checkInDate,
-            String checkOutDate,
-            int totalPrice) {
+    public BillResponseDTO createBillForBooking(String customerId, String bookingId, int totalPrice) {
+        return createBill(customerId, bookingId, BigDecimal.valueOf(totalPrice));
+    }
+
+    /**
+     * Get all bills for the current customer from Bill Service
+     * Used to sync payment status with bookings
+     * 
+     * @return List of CustomerBillDTO, empty list if failed
+     */
+    public List<CustomerBillDTO> getCustomerBills() {
+        log.info("========== GETTING CUSTOMER BILLS ==========");
+        log.info("Target URL: {}", GET_CUSTOMER_BILLS_URL);
         
-        String description = String.format(
-            "Accommodation Booking: %s - %s | Check-in: %s | Check-out: %s",
-            propertyName,
-            roomTypeName,
-            checkInDate,
-            checkOutDate
-        );
+        try {
+            HttpHeaders headers = createAuthHeaders();
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<CustomerBillsResponseDTO> response = restTemplate.exchange(
+                GET_CUSTOMER_BILLS_URL,
+                HttpMethod.GET,
+                entity,
+                CustomerBillsResponseDTO.class
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                CustomerBillsResponseDTO body = response.getBody();
+                log.info("✅ Got {} bills from Bill Service", body.getData() != null ? body.getData().size() : 0);
+                return body.getData() != null ? body.getData() : new ArrayList<>();
+            } else {
+                log.warn("Failed to get customer bills, status: {}", response.getStatusCode());
+                return new ArrayList<>();
+            }
+        } catch (Exception e) {
+            log.error("Error getting customer bills: {} - {}", e.getClass().getSimpleName(), e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * Get set of booking IDs that have been paid in Bill Service
+     * Filters only Accommodation bills with PAID status
+     * 
+     * @return Set of booking IDs (serviceReferenceId) that are PAID
+     */
+    public Set<String> getPaidAccommodationBookingIds() {
+        List<CustomerBillDTO> bills = getCustomerBills();
         
-        return createBill(customerId, bookingId, description, BigDecimal.valueOf(totalPrice));
+        Set<String> paidBookingIds = bills.stream()
+            .filter(CustomerBillDTO::isAccommodationBill)
+            .filter(CustomerBillDTO::isPaid)
+            .map(CustomerBillDTO::getServiceReferenceId)
+            .collect(Collectors.toSet());
+        
+        log.info("Found {} PAID Accommodation bookings in Bill Service: {}", paidBookingIds.size(), paidBookingIds);
+        return paidBookingIds;
     }
 }

@@ -59,11 +59,9 @@ public class BookingController {
         
         if (SecurityUtil.isCustomer()) {
             // Customer can only see their own bookings
+            // This also syncs payment status with Bill Service
             UUID uuid = UUID.fromString(currentUser.getUserId());
-            List<AccommodationBooking> rawBookings = bookingService.getBookingsByCustomer(uuid);
-            bookings = rawBookings.stream()
-                .map(b -> bookingService.getBookingDetail(b.getBookingId()))
-                .collect(Collectors.toList());
+            bookings = bookingService.getBookingsByCustomerAsDTO(uuid);
         } else if (SecurityUtil.isAccommodationOwner()) {
             // Owner can see bookings for their properties
             bookings = bookingService.getAllBookingsAsDTO().stream()

@@ -26,8 +26,12 @@ public interface BookingService {
     BookingResponseDTO updateBookingFromDTO(String id, BookingRequestDTO request);
     BookingResponseDTO getBookingDetail(String id);
     List<BookingResponseDTO> getAllBookingsAsDTO();
+    List<BookingResponseDTO> getBookingsByCustomerAsDTO(UUID customerId);
     void payBookingById(String id);
     void cancelBookingById(String id);
+    
+    // Sync payment status with Bill Service
+    void syncPaymentStatusWithBillService();
     
     // Availability check
     boolean isRoomAvailableForDates(String roomId, LocalDateTime checkIn, LocalDateTime checkOut);
